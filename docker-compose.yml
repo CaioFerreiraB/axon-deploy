@@ -1,0 +1,20 @@
+# A instalação em execução (spec 002 US5; research R24, R25). Segredos e perfil no .env (copie de .env.example).
+#   docker compose up --build      # o build usa o agente SSH para ler o agentic-app e o ai-scouting
+services:
+  ai-core:
+    build:
+      context: .
+      target: runtime
+      ssh:
+        - core=${SSH_AUTH_SOCK}
+        - packs=${SSH_AUTH_SOCK}
+    image: agentic-deploy:local
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config/assistants.yaml:/etc/ai-core/assistants.yaml:ro
+    # Nenhuma instalação em runtime (FR-014): sistema de arquivos somente leitura, com /tmp em memória.
+    read_only: true
+    tmpfs:
+      - /tmp

@@ -1,0 +1,25 @@
+# Assistants de sistema desta instalação (spec 003, assistants-yaml.md). Montado em runtime, somente leitura.
+assistants:
+  scouting:
+    visibility: public
+    auth:
+      schemes: [oidc, api_key]
+      allow: ["*"]
+    flow: chat
+    packs: [scouting]
+    models:
+      generation: openrouter/~z-ai/glm-flash-latest
+      allow: ["openrouter/*"]
+  geral:
+    visibility: public
+    auth:
+      schemes: [oidc, api_key]
+      allow: ["*"]
+    flow: agentic
+    packs: [generic]
+    models:
+      generation: openrouter/~z-ai/glm-flash-latest
+      controller: openrouter/~z-ai/glm-flash-latest
+      allow: ["openrouter/*"]
+api_keys:
+  admin_group: admin

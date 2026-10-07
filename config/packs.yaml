@@ -1,0 +1,7 @@
+# Packs habilitados nesta instalação (spec 002, packs-yaml.md). Vai para a imagem: o build valida exatamente o que roda
+# (research R24). Trocar um pack é mudar PACKS (build-arg) e este arquivo, e rebuildar.
+packs:
+  generic:
+    enabled: true
+  scouting:
+    enabled: true
