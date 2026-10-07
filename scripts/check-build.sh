@@ -3,7 +3,7 @@
 # incompatível falha no `packs check`; o runtime não instala nada.
 #
 #   SSH_CORE, SSH_PACKS  arquivo de chave de cada identidade SSH do build (default: o agente SSH)
-#   CORE_REF             tag ou commit do agentic-app (default: o do Dockerfile)
+#   CORE_REF             tag ou branch do agentic-app (default: a do Dockerfile)
 #   IMAGE                nome da imagem de teste (default: agentic-deploy:check)
 set -euo pipefail
 cd "$(dirname "$0")/.."

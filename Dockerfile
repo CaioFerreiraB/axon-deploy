@@ -23,13 +23,16 @@ ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 ARG CORE_REPO=ssh://git@github.com/CaioFerreiraB/agentic-app.git
+# Tag (ou branch) do agentic-app. O clone é raso e sem submódulos: o agentic-app liga os packs como submódulos, e a
+# identidade `core` só lê o próprio agentic-app.
 ARG CORE_REF=v0.1.0
 RUN --mount=type=ssh,id=core \
-    uv venv /opt/ai-core \
+    git clone --quiet --depth 1 --branch "${CORE_REF}" "${CORE_REPO}" /src/agentic-app
+RUN uv venv /opt/ai-core \
  && uv pip install --no-sources --python /opt/ai-core/bin/python \
-      "ai-core-contracts @ git+${CORE_REPO}@${CORE_REF}#subdirectory=ai-core/packages/contracts" \
-      "ai-core @ git+${CORE_REPO}@${CORE_REF}#subdirectory=ai-core/packages/core" \
-      "ai-generic @ git+${CORE_REPO}@${CORE_REF}#subdirectory=ai-core/packages/generic"
+      /src/agentic-app/ai-core/packages/contracts \
+      /src/agentic-app/ai-core/packages/core \
+      /src/agentic-app/ai-core/packages/generic
 
 FROM core AS packs
 # O packs.yaml vai na imagem: o build valida exatamente os packs e a configuração que vão rodar (research R24).
