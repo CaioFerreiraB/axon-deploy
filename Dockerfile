@@ -29,7 +29,7 @@ ENV UV_LINK_MODE=copy \
 ARG CORE_REPO=ssh://git@github.com/CaioFerreiraB/agentic-app.git
 # Tag (ou branch) do agentic-app. O clone é raso e sem submódulos: o agentic-app liga os packs como submódulos, e a
 # identidade `core` só lê o próprio agentic-app.
-ARG CORE_REF=v0.2.0
+ARG CORE_REF=v0.4.1
 RUN --mount=type=ssh,id=core \
     git clone --quiet --depth 1 --branch "${CORE_REF}" "${CORE_REPO}" /src/agentic-app
 RUN uv venv /opt/ai-core \
@@ -44,7 +44,7 @@ COPY config/packs.yaml /etc/ai-core/packs.yaml
 # Requisitos separados por espaço: PyPI, URL de git (nome@git+ssh://…@ref) ou caminho em /build/packages.
 # `--no-sources`: vale só o que está listado — o [tool.uv.sources] de um pack (que aponta os contratos para o git do
 # agentic-app) é ignorado, e os contratos já instalados no estágio core atendem a faixa dele.
-ARG PACKS="ai-scouting@git+ssh://git@github.com/CaioFerreiraB/ai-scouting.git@c60ffb460e082751e39705b539fbb82aa46eeccb"
+ARG PACKS="ai-scouting@git+ssh://git@github.com/CaioFerreiraB/ai-scouting.git@24cb157590dbc81c9b6778de0b868fcc8064c36b"
 RUN --mount=type=ssh,id=packs \
     --mount=type=bind,source=packages,target=/build/packages \
     uv pip install --no-sources --python /opt/ai-core/bin/python ${PACKS}

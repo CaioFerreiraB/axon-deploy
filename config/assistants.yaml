@@ -22,5 +22,17 @@ assistants:
       generation: openrouter/~z-ai/glm-flash-latest
       controller: openrouter/~z-ai/glm-flash-latest
       allow: ["openrouter/*"]
+  # Só para o grupo `equipe` do provedor OIDC (spec 002 R39): é o que prova, no Open WebUI, que cada usuário vê só os
+  # próprios Assistants (008 US8 cen. 2). No Keycloak de desenvolvimento, a `bia` é do grupo; a `ana`, não.
+  interno:
+    visibility: private
+    auth:
+      schemes: [oidc]
+      allow: ["group:equipe"]
+    flow: chat
+    packs: [generic]
+    models:
+      generation: openrouter/~z-ai/glm-flash-latest
+      allow: ["openrouter/*"]
 api_keys:
   admin_group: admin

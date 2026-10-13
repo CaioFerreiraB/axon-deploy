@@ -2,6 +2,8 @@
 #   docker compose up --build      # o build usa o agente SSH para ler o agentic-app e o ai-scouting
 # Ingestão do corpus do scouting (uma vez, e a cada mudança no corpus), com um clone do ai-scouting ao lado:
 #   docker compose run --rm -v ../ai-scouting/corpus:/corpus:ro ai-core ai-scouting-corpus ingest /corpus/corpus.yaml
+# Open WebUI com SSO num Keycloak de desenvolvimento (spec 002 R37, R38; 008 US8), no perfil webui:
+#   docker compose --profile webui up -d   # http://localhost:3000, entre como ana ou bia
 services:
   ai-core:
     build:
@@ -36,5 +38,72 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
 
+  # Provedor OIDC só de desenvolvimento (spec 002 R37): realm `agentic` importado, usuários ana e bia (grupo equipe).
+  # O navegador usa localhost:8180 (o emissor dos tokens); os contêineres, keycloak:8080. Em produção, o provedor é do
+  # operador e este serviço não sobe.
+  keycloak:
+    profiles: [webui]
+    image: quay.io/keycloak/keycloak:26.7.5
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # Lidos pelos placeholders do realm importado (config/keycloak/agentic-realm.json).
+      OPEN_WEBUI_OIDC_SECRET: ${OPEN_WEBUI_OIDC_SECRET:-}
+      KEYCLOAK_DEV_PASSWORD: ${KEYCLOAK_DEV_PASSWORD:-}
+    volumes:
+      # Os dados do Keycloak persistem: o realm é importado uma vez e os usuários mantêm o mesmo `sub` — o Open WebUI
+      # recusa o mesmo e-mail chegando com outro `sub` (spec 002 R37).
+      - keycloak-data:/opt/keycloak/data
+      - ./config/keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "${KEYCLOAK_HOST_PORT:-8180}:8080"
+
+  # A interface (spec 008 US8; 002 R38): só o formato da OpenAI, configurada por ambiente. A conexão repassa o access
+  # token de cada usuário ao /v1 (system_oauth), manda x-ai-core-store: false (o histórico é do Open WebUI) e as tarefas
+  # auxiliares ficam desligadas — cada mensagem é uma execução da plataforma.
+  open-webui:
+    profiles: [webui]
+    image: ghcr.io/open-webui/open-webui:v0.12.0
+    environment:
+      WEBUI_URL: http://localhost:${OPEN_WEBUI_HOST_PORT:-3000}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-}
+      ENABLE_PERSISTENT_CONFIG: "false"
+      ENABLE_OLLAMA_API: "false"
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: http://ai-core:8000/v1
+      OPENAI_API_CONFIGS: >-
+        {"0": {"enable": true, "auth_type": "system_oauth", "connection_type": "external",
+        "headers": {"x-ai-core-store": "false"}}}
+      BYPASS_MODEL_ACCESS_CONTROL: "true"
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_FOLLOW_UP_GENERATION: "false"
+      ENABLE_AUTOCOMPLETE_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
+      ENABLE_RETRIEVAL_QUERY_GENERATION: "false"
+      ENABLE_OAUTH_SIGNUP: "true"
+      # Quem entra pelo provedor já é usuário: quem pode o quê é decidido pela plataforma (ACL da 003), não por aprovação
+      # no Open WebUI. O primeiro a entrar vira administrador do Open WebUI (só da interface).
+      DEFAULT_USER_ROLE: user
+      ENABLE_LOGIN_FORM: "false"
+      OAUTH_PROVIDER_NAME: Keycloak
+      OPENID_PROVIDER_URL: http://keycloak:8080/realms/agentic/.well-known/openid-configuration
+      OAUTH_CLIENT_ID: open-webui
+      OAUTH_CLIENT_SECRET: ${OPEN_WEBUI_OIDC_SECRET:-}
+      OAUTH_SCOPES: openid email profile
+      OPENID_REDIRECT_URI: http://localhost:${OPEN_WEBUI_HOST_PORT:-3000}/oauth/oidc/callback
+    volumes:
+      - open-webui-data:/app/backend/data
+    ports:
+      - "${OPEN_WEBUI_HOST_PORT:-3000}:8080"
+    depends_on:
+      - ai-core
+      - keycloak
+
 volumes:
   qdrant-data:
+  open-webui-data:
+  keycloak-data:
