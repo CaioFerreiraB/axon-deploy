@@ -5,8 +5,9 @@ assistants:
     auth:
       schemes: [oidc, api_key]
       allow: ["*"]
-    flow: chat
+    # Sem `flow`: roda no preferido do pack, rag_first (spec 101 US5); a coleção scouting libera a tool de busca.
     packs: [scouting]
+    collections: [scouting]
     models:
       generation: openrouter/~z-ai/glm-flash-latest
       allow: ["openrouter/*"]

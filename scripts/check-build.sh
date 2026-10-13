@@ -27,6 +27,12 @@ echo "$list"
 grep -Eq '^generic .* enabled' <<<"$list" || fail "generic não está enabled"
 grep -Eq '^scouting .* enabled' <<<"$list" || fail "scouting não está enabled"
 
+step "2b. o modelo de embedding do scouting e a CLI do corpus estão na imagem"
+docker run --rm "$IMAGE" test -f /opt/ai-scouting/e5-small/model.onnx -a -f /opt/ai-scouting/e5-small/tokenizer.json \
+  || fail "o modelo do scouting não está em /opt/ai-scouting/e5-small"
+docker run --rm "$IMAGE" ai-scouting-corpus --help >/dev/null || fail "ai-scouting-corpus não roda na imagem"
+echo "modelo em /opt/ai-scouting/e5-small; ai-scouting-corpus disponível"
+
 step "3. os Assistants da instalação validam"
 ai_core assistants validate || fail "assistants validate reprovou config/assistants.yaml"
 

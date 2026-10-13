@@ -1,5 +1,7 @@
-# A instalação em execução (spec 002 US5; research R24, R25). Segredos e perfil no .env (copie de .env.example).
+# A instalação em execução (spec 002 US5; research R24, R25, R33, R34). Segredos e perfil no .env (copie de .env.example).
 #   docker compose up --build      # o build usa o agente SSH para ler o agentic-app e o ai-scouting
+# Ingestão do corpus do scouting (uma vez, e a cada mudança no corpus), com um clone do ai-scouting ao lado:
+#   docker compose run --rm -v ../ai-scouting/corpus:/corpus:ro ai-core ai-scouting-corpus ingest /corpus/corpus.yaml
 services:
   ai-core:
     build:
@@ -10,11 +12,29 @@ services:
         - packs=${SSH_AUTH_SOCK}
     image: agentic-deploy:local
     env_file: .env
+    environment:
+      # Os da CLI `ai-scouting-corpus` (spec 102): o mesmo Qdrant e o mesmo modelo do config do pack no packs.yaml.
+      AI_SCOUTING_QDRANT_URL: http://qdrant:6333
+      AI_SCOUTING_EMBEDDING_DIR: /opt/ai-scouting/e5-small
     ports:
-      - "8000:8000"
+      - "${AI_CORE_HOST_PORT:-8000}:8000"
     volumes:
       - ./config/assistants.yaml:/etc/ai-core/assistants.yaml:ro
+    depends_on:
+      - qdrant
     # Nenhuma instalação em runtime (FR-014): sistema de arquivos somente leitura, com /tmp em memória.
     read_only: true
     tmpfs:
       - /tmp
+
+  # O índice do scouting (spec 102). Só na rede do compose: nenhuma porta publicada.
+  qdrant:
+    image: qdrant/qdrant:v1.19.2
+    environment:
+      # Opcional: com valor, o servidor exige a chave, e o pack a lê de AI_SCOUTING_QDRANT_API_KEY (o mesmo valor).
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+volumes:
+  qdrant-data:

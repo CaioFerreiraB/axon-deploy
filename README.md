@@ -11,8 +11,9 @@ este repositório é o submódulo `agentic-deploy/`.
 
 | Caminho | Para quê |
 |---|---|
-| `Dockerfile` | estágios `core` (tag `CORE_REF` do agentic-app), `packs` (`PACKS` + `packs check`) e `runtime` |
-| `config/packs.yaml` | packs habilitados — vai para a imagem, então o build valida o que roda |
+| `Dockerfile` | estágios `core` (tag `CORE_REF` do agentic-app), `packs` (`PACKS`, o modelo de embedding do scouting e `packs check`) e `runtime` |
+| `config/packs.yaml` | packs habilitados e a configuração deles (o Qdrant e o modelo do scouting) — vai para a imagem, então o build valida o que roda |
+| `docker-compose.yml` | o `ai-core` e o Qdrant do scouting, só na rede do compose |
 | `config/assistants.yaml` | Assistants de sistema — montado em runtime, somente leitura |
 | `.env.example` | perfil, chave de desenvolvimento e credenciais (copie para `.env`, fora do git) |
 | `packages/incompatible-pack/` | pack incompatível de propósito, usado só pelo teste |
@@ -25,11 +26,22 @@ O build lê o `agentic-app` e o `ai-scouting` (privados) pelo agente SSH: a sua 
 ```bash
 scripts/check-build.sh                 # o teste completo
 cp .env.example .env                   # e preencha
-docker compose up --build              # serviço em :8000
+docker compose up --build -d           # ai-core em :8000 e o Qdrant
 ```
 
+O pack `scouting` responde a partir do corpus indexado (`rag_first`). O corpus mora no `ai-scouting`: com um clone dele
+ao lado deste repositório, a ingestão usa a CLI da própria imagem — mesma codificação na indexação e na busca:
+
+```bash
+docker compose run --rm -v ../ai-scouting/corpus:/corpus:ro ai-core ai-scouting-corpus ingest /corpus/corpus.yaml
+docker compose run --rm ai-core ai-scouting-corpus status
+```
+
+Repita a ingestão quando o corpus mudar (ela reaproveita o que não mudou). O Qdrant fica no volume `qdrant-data`. Chave
+do Qdrant: opcional; se usar, o mesmo valor em `QDRANT_API_KEY` e `AI_SCOUTING_QDRANT_API_KEY` no `.env`.
+
 Trocar ou acrescentar um pack: mudar o `PACKS` (no `Dockerfile` ou com `--build-arg`) e o `config/packs.yaml`, e
-rebuildar. Trocar a versão do core: `CORE_REF`.
+rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.2.0`, com o `rag_first`).
 
 ## CI
 

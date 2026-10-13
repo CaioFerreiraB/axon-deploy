@@ -5,3 +5,8 @@ packs:
     enabled: true
   scouting:
     enabled: true
+    # Configuração do pack (spec 101, research R18), validada pelo config_schema no boot e no `packs check` do build.
+    # A chave do Qdrant, quando houver, vem só de AI_SCOUTING_QDRANT_API_KEY (.env), nunca daqui.
+    config:
+      qdrant_url: http://qdrant:6333
+      embedding_dir: /opt/ai-scouting/e5-small
