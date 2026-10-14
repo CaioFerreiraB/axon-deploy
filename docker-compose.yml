@@ -1,9 +1,12 @@
-# A instalação em execução (spec 002 US5; research R24, R25, R33, R34). Segredos e perfil no .env (copie de .env.example).
+# A instalação em execução (spec 002 US5, US7; research R24, R25, R33, R34, R42–R45). Segredos e modo no .env (copie de
+# .env.example).
 #   docker compose up --build      # o build usa o agente SSH para ler o agentic-app e o ai-scouting
+# Modos (R42): sem perfil, só a API (chaves de API); com COMPOSE_PROFILES=webui no .env, também o Open WebUI, que entra
+# pelo provedor de identidade da própria plataforma (spec 012) — o Keycloak de desenvolvimento saiu (ADR-030).
 # Ingestão do corpus do scouting (uma vez, e a cada mudança no corpus), com um clone do ai-scouting ao lado:
 #   docker compose run --rm -v ../ai-scouting/corpus:/corpus:ro ai-core ai-scouting-corpus ingest /corpus/corpus.yaml
-# Open WebUI com SSO num Keycloak de desenvolvimento (spec 002 R37, R38; 008 US8), no perfil webui:
-#   docker compose --profile webui up -d   # http://localhost:3000, entre como ana ou bia
+# Contas (com a identidade ligada), antes ou depois de subir:
+#   docker compose run --rm ai-core ai-core users create <nome> --email <e-mail> [--group admin]
 services:
   ai-core:
     build:
@@ -15,6 +18,13 @@ services:
     image: agentic-deploy:local
     env_file: .env
     environment:
+      # Postgres sempre (R43): contas, chaves de API, Assistants de usuário, conversas e servidores MCP sobrevivem a
+      # restart. A senha vem do .env; o banco só existe na rede do compose.
+      AI_CORE_PROFILE: persistent
+      AI_CORE_DATABASE_URL: postgresql://ai_core:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/ai_core
+      # O emissor dos tokens é o endereço que o navegador vê (spec 012 FR-019); os contêineres falam com ai-core:8000.
+      AI_CORE_PUBLIC_URL: ${AI_CORE_PUBLIC_URL:-http://localhost:${AI_CORE_HOST_PORT:-8000}}
+      AI_CORE_IDENTITY_CLIENTS_FILE: /etc/ai-core/identity.yaml
       # Os da CLI `ai-scouting-corpus` (spec 102): o mesmo Qdrant e o mesmo modelo do config do pack no packs.yaml.
       AI_SCOUTING_QDRANT_URL: http://qdrant:6333
       AI_SCOUTING_EMBEDDING_DIR: /opt/ai-scouting/e5-small
@@ -22,12 +32,33 @@ services:
       - "${AI_CORE_HOST_PORT:-8000}:8000"
     volumes:
       - ./config/assistants.yaml:/etc/ai-core/assistants.yaml:ro
+      - ./config/identity.yaml:/etc/ai-core/identity.yaml:ro
+      # Arquivos de segredo (o da senha do admin inicial, quando usado): nunca em variável de ambiente.
+      - ./secrets:/run/secrets/ai-core:ro
     depends_on:
-      - qdrant
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
     # Nenhuma instalação em runtime (FR-014): sistema de arquivos somente leitura, com /tmp em memória.
     read_only: true
     tmpfs:
       - /tmp
+
+  # O banco da plataforma (R43). Só na rede do compose: nenhuma porta publicada.
+  postgres:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: ai_core
+      POSTGRES_DB: ai_core
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_core -d ai_core"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   # O índice do scouting (spec 102). Só na rede do compose: nenhuma porta publicada.
   qdrant:
@@ -38,33 +69,11 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
 
-  # Provedor OIDC só de desenvolvimento (spec 002 R37): realm `agentic` importado, usuários ana e bia (grupo equipe).
-  # O navegador usa localhost:8180 (o emissor dos tokens); os contêineres, keycloak:8080. Em produção, o provedor é do
-  # operador e este serviço não sobe.
-  keycloak:
-    profiles: [webui]
-    image: quay.io/keycloak/keycloak:26.7.5
-    command: ["start-dev", "--import-realm"]
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
-      KC_HOSTNAME: http://localhost:${KEYCLOAK_HOST_PORT:-8180}
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
-      # Lidos pelos placeholders do realm importado (config/keycloak/agentic-realm.json).
-      OPEN_WEBUI_OIDC_SECRET: ${OPEN_WEBUI_OIDC_SECRET:-}
-      KEYCLOAK_DEV_PASSWORD: ${KEYCLOAK_DEV_PASSWORD:-}
-    volumes:
-      # Os dados do Keycloak persistem: o realm é importado uma vez e os usuários mantêm o mesmo `sub` — o Open WebUI
-      # recusa o mesmo e-mail chegando com outro `sub` (spec 002 R37).
-      - keycloak-data:/opt/keycloak/data
-      - ./config/keycloak:/opt/keycloak/data/import:ro
-    ports:
-      - "${KEYCLOAK_HOST_PORT:-8180}:8080"
-
-  # A interface (spec 008 US8; 002 R38): só o formato da OpenAI, configurada por ambiente. A conexão repassa o access
-  # token de cada usuário ao /v1 (system_oauth), manda x-ai-core-store: false (o histórico é do Open WebUI) e
-  # x-ai-core-progress: status (o progresso vira a timeline de status do Open WebUI, com chamadas, retornos, decisões e
-  # tempos — 008 FR-005a), e as tarefas auxiliares ficam desligadas — cada mensagem é uma execução da plataforma.
+  # A interface (spec 008 US8; 002 R38, R44): só o formato da OpenAI, configurada por ambiente. O login é o da
+  # plataforma (spec 012): o Open WebUI é o cliente confidencial `open-webui` do config/identity.yaml. A conexão repassa
+  # o access token de cada usuário ao /v1 (system_oauth), manda x-ai-core-store: false (o histórico é do Open WebUI) e
+  # x-ai-core-progress: status (o progresso vira a timeline de status do Open WebUI — 008 FR-005a), e as tarefas
+  # auxiliares ficam desligadas — cada mensagem é uma execução da plataforma.
   open-webui:
     profiles: [webui]
     image: ghcr.io/open-webui/open-webui:v0.12.0
@@ -96,16 +105,20 @@ services:
       # Quem entra pelo provedor já é usuário: quem pode o quê é decidido pela plataforma (ACL da 003), não por aprovação
       # no Open WebUI. O primeiro a entrar vira administrador do Open WebUI (só da interface).
       DEFAULT_USER_ROLE: user
-      # A sessão do Open WebUI precisa vencer antes da do provedor: depois que a do provedor cai, ele não renova mais o
-      # token que repassa à plataforma, a lista de modelos volta vazia e a conversa falha ("Model '' was not found").
-      # O realm de desenvolvimento dura 10 h; em produção, use um valor menor que a sessão do provedor do operador.
-      JWT_EXPIRES_IN: ${OPEN_WEBUI_SESSION_EXPIRES_IN:-8h}
+      # A sessão do Open WebUI precisa vencer antes da do provedor (30 dias, spec 012): depois que a do provedor cai,
+      # ele não renova mais o token que repassa à plataforma e a conversa falha ("Model '' was not found").
+      JWT_EXPIRES_IN: ${OPEN_WEBUI_SESSION_EXPIRES_IN:-29d}
       ENABLE_LOGIN_FORM: "false"
-      OAUTH_PROVIDER_NAME: Keycloak
-      OPENID_PROVIDER_URL: http://keycloak:8080/realms/agentic/.well-known/openid-configuration
+      OAUTH_PROVIDER_NAME: ${AI_CORE_DISPLAY_NAME:-Agentic}
+      # A descoberta pelo endereço interno: ela responde o emissor público (o do navegador) e os endpoints de servidor
+      # pelo endereço pelo qual chegou (spec 012 R8).
+      OPENID_PROVIDER_URL: http://ai-core:8000/.well-known/openid-configuration
       OAUTH_CLIENT_ID: open-webui
-      OAUTH_CLIENT_SECRET: ${OPEN_WEBUI_OIDC_SECRET:-}
-      OAUTH_SCOPES: openid email profile
+      OAUTH_CLIENT_SECRET: ${AI_CORE_IDENTITY_SECRET_OPEN_WEBUI:-}
+      OAUTH_SCOPES: openid email profile groups offline_access
+      OAUTH_CODE_CHALLENGE_METHOD: S256
+      # Contas criadas na Fase 7 (Keycloak) são religadas pelo e-mail: o `sub` muda, o e-mail não (R48).
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
       OPENID_REDIRECT_URI: http://localhost:${OPEN_WEBUI_HOST_PORT:-3000}/oauth/oidc/callback
     volumes:
       - open-webui-data:/app/backend/data
@@ -113,9 +126,8 @@ services:
       - "${OPEN_WEBUI_HOST_PORT:-3000}:8080"
     depends_on:
       - ai-core
-      - keycloak
 
 volumes:
+  postgres-data:
   qdrant-data:
   open-webui-data:
-  keycloak-data:

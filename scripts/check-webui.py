@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Prova da interface (spec 002 R40; spec 008 US8 cen. 2–5): Open WebUI + Keycloak de desenvolvimento + plataforma.
+"""Prova da interface (spec 002 R40, R49; spec 008 US8 cen. 2–5): Open WebUI + o provedor de identidade da plataforma.
 
-Com o perfil webui de pé (`docker compose --profile webui up -d`), entra no Open WebUI como `ana` e como `bia` pelo
-fluxo OIDC de verdade (o formulário do Keycloak), lê a lista de modelos de cada uma e manda uma mensagem pelo próprio
-Open WebUI, que chega à plataforma pela conexão `system_oauth`. Confere:
+Com o perfil webui de pé e as contas de desenvolvimento criadas (`scripts/dev-users.sh`), entra no Open WebUI como
+`ana` e como `bia` pelo fluxo OIDC de verdade — o formulário de login da própria plataforma (spec 012) —, lê a lista
+de modelos de cada uma e manda uma mensagem pelo próprio Open WebUI, que chega à plataforma pela conexão
+`system_oauth` com o token que a plataforma emitiu. Confere:
 
   1. a `bia` (grupo equipe) vê o Assistant `interno`; a `ana`, não — e as duas veem os públicos (US8 cen. 1–2);
   2. a mensagem, montada como a tela de chat a monta, volta respondida pela plataforma (US8 cen. 3);
@@ -12,7 +13,8 @@ Open WebUI, que chega à plataforma pela conexão `system_oauth`. Confere:
   5. a timeline de status chegou e ficou gravada na mensagem (`statusHistory`), da preparação à linha de conclusão
      (008 FR-005a, x-ai-core-progress: status).
 
-Só biblioteca padrão; lê as senhas de desenvolvimento do .env sem exibi-las. Rode da raiz do agentic-deploy.
+Só biblioteca padrão; lê a senha de desenvolvimento do .env (DEV_USERS_PASSWORD) sem exibi-la. Rode da raiz do
+agentic-deploy.
 """
 
 from __future__ import annotations
@@ -30,8 +32,8 @@ from http.cookiejar import CookieJar, DefaultCookiePolicy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FORM = re.compile(r'<form[^>]*\bid="kc-form-login"[^>]*>|<form[^>]*\baction="[^"]*login-actions[^"]*"[^>]*>', re.S)
-ACTION = re.compile(r'\baction="([^"]+)"')
+FORM = re.compile(r'<form method="post" action="(/oauth2/login)">')
+HIDDEN = re.compile(r'<input type="hidden" name="([a-z_]+)" value="([^"]*)"')
 MESSAGE = "Responda só com a palavra: pronto."
 
 
@@ -58,18 +60,21 @@ class Session:
 
     def __init__(self, user: str) -> None:
         self.user = user
-        # O Keycloak marca os cookies de sessão como `Secure`; os navegadores os mandam para http://localhost (contexto
-        # seguro), mas o cookiejar do Python só por https — sem isto, o login volta 400 ("cookie não encontrado").
+        # Com `AI_CORE_PUBLIC_URL` em https, o cookie de sessão da plataforma é `Secure`; os navegadores o mandam para
+        # http://localhost (contexto seguro), mas o cookiejar do Python só por https.
         self.jar = CookieJar(policy=DefaultCookiePolicy(secure_protocols=("https", "wss", "http")))
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
-        page = self.opener.open(f"{WEBUI}/oauth/oidc/login", timeout=30).read().decode("utf-8")
+        # O Open WebUI redireciona para o /oauth2/authorize da plataforma, que mostra a página de login.
+        response = self.opener.open(f"{WEBUI}/oauth/oidc/login", timeout=30)
+        page = response.read().decode("utf-8")
         form = FORM.search(page)
-        action = ACTION.search(form.group(0)) if form else None
-        if action is None:
-            fail(f"{user}: o formulário de login do Keycloak não apareceu")
-        fields = {"username": user, "password": CONFIG["KEYCLOAK_DEV_PASSWORD"], "credentialId": ""}
+        if form is None:
+            fail(f"{user}: a página de login da plataforma não apareceu (em {response.geturl()})")
+        fields = {name: html.unescape(value) for name, value in HIDDEN.findall(page)}
+        fields |= {"identifier": user, "password": CONFIG["DEV_USERS_PASSWORD"]}
         data = urllib.parse.urlencode(fields).encode()
-        self.opener.open(html.unescape(action.group(1)), data=data, timeout=30).read()
+        # Login aceito → a plataforma volta ao callback do Open WebUI com o código, e ele abre a sessão.
+        self.opener.open(urllib.parse.urljoin(response.geturl(), form.group(1)), data=data, timeout=30).read()
         cookies = {cookie.name: cookie.value for cookie in self.jar}
         if "token" not in cookies:
             fail(f"{user}: o Open WebUI não abriu sessão depois do login (cookies: {sorted(cookies)})")

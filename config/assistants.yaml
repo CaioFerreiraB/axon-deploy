@@ -22,8 +22,8 @@ assistants:
       generation: openrouter/nvidia/nemotron-3-super-120b-a12b:free
       controller: openrouter/nvidia/nemotron-3-super-120b-a12b:free
       allow: ["openrouter/*"]
-  # Só para o grupo `equipe` do provedor OIDC (spec 002 R39): é o que prova, no Open WebUI, que cada usuário vê só os
-  # próprios Assistants (008 US8 cen. 2). No Keycloak de desenvolvimento, a `bia` é do grupo; a `ana`, não.
+  # Só para o grupo `equipe` (spec 002 R39): é o que prova, no Open WebUI, que cada usuário vê só os próprios
+  # Assistants (008 US8 cen. 2). Nas contas de desenvolvimento (scripts/dev-users.sh), a `bia` é do grupo; a `ana`, não.
   interno:
     visibility: private
     auth:

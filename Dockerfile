@@ -29,7 +29,7 @@ ENV UV_LINK_MODE=copy \
 ARG CORE_REPO=ssh://git@github.com/CaioFerreiraB/agentic-app.git
 # Tag (ou branch) do agentic-app. O clone é raso e sem submódulos: o agentic-app liga os packs como submódulos, e a
 # identidade `core` só lê o próprio agentic-app.
-ARG CORE_REF=v0.5.0
+ARG CORE_REF=v0.6.0-rc2
 RUN --mount=type=ssh,id=core \
     git clone --quiet --depth 1 --branch "${CORE_REF}" "${CORE_REPO}" /src/agentic-app
 RUN uv venv /opt/ai-core \
