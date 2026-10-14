@@ -5,6 +5,8 @@
   "sslRequired": "none",
   "registrationAllowed": false,
   "loginWithEmailAllowed": true,
+  "ssoSessionIdleTimeout": 36000,
+  "ssoSessionMaxLifespan": 36000,
   "groups": [{ "name": "equipe" }],
   "clients": [
     {

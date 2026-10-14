@@ -43,7 +43,7 @@ Repita a ingestão quando o corpus mudar (ela reaproveita o que não mudou). O Q
 do Qdrant: opcional; se usar, o mesmo valor em `QDRANT_API_KEY` e `AI_SCOUTING_QDRANT_API_KEY` no `.env`.
 
 Trocar ou acrescentar um pack: mudar o `PACKS` (no `Dockerfile` ou com `--build-arg`) e o `config/packs.yaml`, e
-rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.4.1`: `rag_first`, harness de avaliação, fila, progresso como raciocínio e o verificador OIDC que aceita o JWKS do Keycloak).
+rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.5.0`: `rag_first`, harness de avaliação, fila, o verificador OIDC que aceita o JWKS do Keycloak e a timeline de status no Open WebUI).
 
 ## Open WebUI (perfil `webui`)
 
@@ -51,7 +51,11 @@ A interface é o Open WebUI v0.12, configurado só por ambiente (spec 008 US8; s
 provedor OIDC, e a conexão repassa o access token de cada usuário ao `/v1` da plataforma (`system_oauth`) — cada um vê
 como modelos só os Assistants que a plataforma resolve para ele. As tarefas auxiliares (título, tags, sugestões,
 autocompletar, consultas de busca) ficam desligadas, e a conexão manda `x-ai-core-store: false`: o histórico é do Open
-WebUI, e cada mensagem é uma execução da plataforma.
+WebUI, e cada mensagem é uma execução da plataforma. Ela manda também `x-ai-core-progress: status`: o que a execução faz
+aparece na timeline de status acima da resposta — a busca e os documentos achados, o portão de cobertura, a decisão do
+controller, o modelo, os tokens e o tempo de cada etapa —, em vez do bloco "Pensou por N segundos". A chamada de função fica no modo legado e sem as ferramentas embutidas
+do Open WebUI (`DEFAULT_MODEL_PARAMS`, `DEFAULT_MODEL_METADATA`): as capacidades vêm do Assistant, e a plataforma recusa
+o campo `tools` — que o modo nativo, padrão do v0.12, mandaria em toda conversa do navegador.
 
 Para desenvolvimento, o perfil traz um **Keycloak só de desenvolvimento** com o realm `agentic` (usuários `ana` e `bia`;
 a `bia` é do grupo `equipe` e vê também o Assistant `interno`). Preencha no `.env` a seção do perfil `webui` do
@@ -60,9 +64,13 @@ a `bia` é do grupo `equipe` e vê também o Assistant `interno`). Preencha no `
 ```bash
 docker compose --profile webui up -d --build
 # http://localhost:3000 → "Continuar com Keycloak" → ana ou bia, com a senha KEYCLOAK_DEV_PASSWORD do .env
-python3 scripts/check-webui.py   # a prova: listas por usuário, uma mensagem, uma execução, nada gravado
+python3 scripts/check-webui.py   # a prova: listas por usuário, uma mensagem como a tela manda, uma execução (200)
 docker compose --profile webui down
 ```
+
+A sessão do Open WebUI dura 8 h (`OPEN_WEBUI_SESSION_EXPIRES_IN`) e a do Keycloak de desenvolvimento, 10 h: a do Open
+WebUI precisa vencer antes, porque sem sessão no provedor ele não renova o token que repassa à plataforma. Se aparecer
+"Model '' was not found" (lista de modelos vazia), a sessão do provedor caiu: saia do Open WebUI e entre de novo.
 
 Os dados do Keycloak ficam no volume `keycloak-data` (o realm é importado uma vez). Apagou esse volume? Apague também o
 `open-webui-data`: os usuários renascem com outro `sub`, e o Open WebUI recusa o mesmo e-mail com outra identidade.

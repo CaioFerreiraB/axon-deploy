@@ -6,9 +6,11 @@ fluxo OIDC de verdade (o formulário do Keycloak), lê a lista de modelos de cad
 Open WebUI, que chega à plataforma pela conexão `system_oauth`. Confere:
 
   1. a `bia` (grupo equipe) vê o Assistant `interno`; a `ana`, não — e as duas veem os públicos (US8 cen. 1–2);
-  2. a mensagem volta respondida pela plataforma (US8 cen. 3);
+  2. a mensagem, montada como a tela de chat a monta, volta respondida pela plataforma (US8 cen. 3);
   3. o log de acesso do ai-core mostra exatamente um POST /v1/chat/completions — nenhuma tarefa auxiliar (cen. 4);
-  4. a resposta não traz id de conversa: a conexão manda x-ai-core-store: false (cen. 5).
+  4. esse pedido foi aceito (200): sem o campo `tools` e efêmero, com x-ai-core-store: false (cen. 5);
+  5. a timeline de status chegou e ficou gravada na mensagem (`statusHistory`), da preparação à linha de conclusão
+     (008 FR-005a, x-ai-core-progress: status).
 
 Só biblioteca padrão; lê as senhas de desenvolvimento do .env sem exibi-las. Rode da raiz do agentic-deploy.
 """
@@ -23,6 +25,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+import uuid
 from http.cookiejar import CookieJar, DefaultCookiePolicy
 from pathlib import Path
 
@@ -84,6 +87,54 @@ class Session:
         )
         return json.loads(self.opener.open(request, timeout=120).read())
 
+    def chat(self, model: str, content: str, timeout: float = 90) -> dict[str, object]:
+        """Uma mensagem como a tela de chat do v0.12 a manda (`Chat.svelte`): conversa salva, `chat_id`, `session_id`,
+        `model_item`, `features` (memória ligada, como o padrão) e `background_tasks`. É o `session_id` que liga as
+        ferramentas embutidas do Open WebUI; com `chat_id`, a resposta é gravada na conversa, e é de lá que se lê — o
+        texto e a timeline de status (`statusHistory`)."""
+        item = next(m for m in self.get("/api/models")["data"] if m["id"] == model)  # type: ignore[index]
+        chat = self.post(
+            "/api/v1/chats/new",
+            {"chat": {"title": "check-webui", "models": [model], "messages": [], "history": {"messages": {}}}},
+        )
+        chat_id = chat["id"]  # type: ignore[index]
+        user_id, answer_id = str(uuid.uuid4()), str(uuid.uuid4())
+        body = {
+            "stream": True,
+            "model": model,
+            "messages": [{"role": "user", "content": content}],
+            "params": {"model_controls": {}},
+            "tool_ids": [],
+            "tool_servers": [],
+            "features": {
+                "voice": False,
+                "image_generation": False,
+                "code_interpreter": False,
+                "web_search": False,
+                "memory": True,
+            },
+            "variables": {},
+            "model_item": item,
+            "session_id": f"check-webui-{self.user}",
+            "chat_id": chat_id,
+            "id": answer_id,
+            "parent_id": user_id,
+            "user_message": {"id": user_id, "role": "user", "content": content, "parentId": None},
+            "background_tasks": {"title_generation": True, "tags_generation": True, "follow_up_generation": True},
+        }
+        self.post("/api/chat/completions", body)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            time.sleep(2)
+            saved = self.get(f"/api/v1/chats/{chat_id}")
+            message = saved["chat"]["history"]["messages"].get(answer_id) or {}  # type: ignore[index]
+            if message.get("error"):
+                fail(f"{self.user}: o Open WebUI mostrou erro: {message['error']}")
+            if message.get("done"):
+                return dict(message)
+        fail(f"{self.user}: a resposta não chegou em {timeout:.0f} s")
+        return {}
+
     def models(self) -> set[str]:
         payload = self.get("/api/models")
         data = payload["data"] if isinstance(payload, dict) else payload
@@ -113,11 +164,10 @@ def main() -> None:
     if not {"geral", "scouting"} <= modelos_ana:
         fail("a ana não vê os Assistants públicos")
 
-    print("\n== 2. uma mensagem pelo Open WebUI chega à plataforma")
+    print("\n== 2. uma mensagem pelo Open WebUI chega à plataforma, montada como a tela de chat a monta")
     since = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 1))
-    body = {"model": "interno", "messages": [{"role": "user", "content": MESSAGE}], "stream": False}
-    resposta = bia.post("/api/chat/completions", body)
-    texto = resposta["choices"][0]["message"]["content"]  # type: ignore[index]
+    mensagem = bia.chat("interno", MESSAGE)
+    texto = str(mensagem.get("content") or "")
     print(f"resposta: {texto!r}")
     if not texto.strip():
         fail("resposta vazia")
@@ -130,13 +180,28 @@ def main() -> None:
     if len(pedidos) != 1:
         fail(f"esperado 1 POST /v1/chat/completions no ai-core, vieram {len(pedidos)}")
 
-    print("\n== 4. pedido efêmero: nenhuma conversa na resposta")
-    extra = resposta.get("x_ai_core") if isinstance(resposta, dict) else None
-    if extra is not None and extra.get("conversation_id"):
-        fail(f"a plataforma gravou a conversa {extra['conversation_id']} (x-ai-core-store não chegou?)")
-    print("sem conversation_id" if extra is not None else "o Open WebUI não repassa o campo extra; nada a conferir aqui")
+    print("\n== 4. pedido efêmero e sem ferramentas: o pedido foi aceito pela plataforma")
+    if not pedidos[0].rstrip().endswith("200 OK"):
+        fail(f"a plataforma recusou o pedido do Open WebUI: {pedidos[0].strip()}")
+    print("200 OK — sem `tools` (recusado com 400) e sem conversa gravada (x-ai-core-store: false)")
 
-    print("\nOK: cada usuário vê só os próprios Assistants, e uma mensagem do Open WebUI é uma execução da plataforma.")
+    print("\n== 5. a timeline de status (x-ai-core-progress: status)")
+    historico = mensagem.get("statusHistory")
+    timeline = [item for item in historico if isinstance(item, dict)] if isinstance(historico, list) else []
+    for item in timeline:
+        print(f"  {'●' if item.get('done') else '◌'} {item.get('description')}")
+    descricoes = [str(item.get("description", "")) for item in timeline]
+    if not descricoes or descricoes[0] != "Preparando o contexto da pergunta…":
+        fail("a timeline não começou pela preparação do contexto")
+    if not any(linha.startswith("Resposta de ") for linha in descricoes):
+        fail("a timeline não nomeia o modelo que gerou a resposta")
+    if not descricoes[-1].startswith("Concluído em ") or timeline[-1].get("done") is not True:
+        fail("a timeline não terminou com a linha de conclusão")
+
+    print(
+        "\nOK: cada usuário vê só os próprios Assistants, uma mensagem do Open WebUI é uma execução da plataforma, e o"
+        " progresso dela aparece como timeline de status."
+    )
 
 
 if __name__ == "__main__":

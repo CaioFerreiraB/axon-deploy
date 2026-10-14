@@ -62,8 +62,9 @@ services:
       - "${KEYCLOAK_HOST_PORT:-8180}:8080"
 
   # A interface (spec 008 US8; 002 R38): só o formato da OpenAI, configurada por ambiente. A conexão repassa o access
-  # token de cada usuário ao /v1 (system_oauth), manda x-ai-core-store: false (o histórico é do Open WebUI) e as tarefas
-  # auxiliares ficam desligadas — cada mensagem é uma execução da plataforma.
+  # token de cada usuário ao /v1 (system_oauth), manda x-ai-core-store: false (o histórico é do Open WebUI) e
+  # x-ai-core-progress: status (o progresso vira a timeline de status do Open WebUI, com chamadas, retornos, decisões e
+  # tempos — 008 FR-005a), e as tarefas auxiliares ficam desligadas — cada mensagem é uma execução da plataforma.
   open-webui:
     profiles: [webui]
     image: ghcr.io/open-webui/open-webui:v0.12.0
@@ -76,8 +77,15 @@ services:
       OPENAI_API_BASE_URLS: http://ai-core:8000/v1
       OPENAI_API_CONFIGS: >-
         {"0": {"enable": true, "auth_type": "system_oauth", "connection_type": "external",
-        "headers": {"x-ai-core-store": "false"}}}
+        "headers": {"x-ai-core-store": "false", "x-ai-core-progress": "status"}}}
       BYPASS_MODEL_ACCESS_CONTROL: "true"
+      # Nenhum `tools` vai à plataforma, que o recusa porque as capacidades vêm do Assistant (princípio IV). Na chamada
+      # de função nativa — o padrão do v0.12 — as ferramentas embutidas do Open WebUI (memória, notas, hora, calendário,
+      # automações…) iriam no campo `tools` de toda conversa do navegador. O modo legado nunca as manda; e o metadado
+      # desliga as embutidas mesmo se um modelo voltar ao nativo. Cadastro de modelo feito pela tela vence o metadado
+      # padrão (vem com tudo ligado), mas os parâmetros dele ficam vazios, então o modo legado continua valendo.
+      DEFAULT_MODEL_PARAMS: '{"function_calling": "legacy"}'
+      DEFAULT_MODEL_METADATA: '{"capabilities": {"builtin_tools": false}}'
       ENABLE_TITLE_GENERATION: "false"
       ENABLE_TAGS_GENERATION: "false"
       ENABLE_FOLLOW_UP_GENERATION: "false"
@@ -88,6 +96,10 @@ services:
       # Quem entra pelo provedor já é usuário: quem pode o quê é decidido pela plataforma (ACL da 003), não por aprovação
       # no Open WebUI. O primeiro a entrar vira administrador do Open WebUI (só da interface).
       DEFAULT_USER_ROLE: user
+      # A sessão do Open WebUI precisa vencer antes da do provedor: depois que a do provedor cai, ele não renova mais o
+      # token que repassa à plataforma, a lista de modelos volta vazia e a conversa falha ("Model '' was not found").
+      # O realm de desenvolvimento dura 10 h; em produção, use um valor menor que a sessão do provedor do operador.
+      JWT_EXPIRES_IN: ${OPEN_WEBUI_SESSION_EXPIRES_IN:-8h}
       ENABLE_LOGIN_FORM: "false"
       OAUTH_PROVIDER_NAME: Keycloak
       OPENID_PROVIDER_URL: http://keycloak:8080/realms/agentic/.well-known/openid-configuration
