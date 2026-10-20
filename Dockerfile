@@ -5,6 +5,7 @@
 #   packs    core + os packs do build-arg PACKS + o modelo de embedding do scouting; `ai-core packs check` reprova
 #            pack incompatível (falha o build)
 #   runtime  o ambiente pronto, sem uv, pip nem ensurepip, como usuário sem escrita nele
+#   console  a console de administração (spec 013) da mesma CORE_REF, num nginx sem privilégio (research R46)
 #
 # Código privado entra por montagem SSH do BuildKit (identidades `core` e `packs`): nenhuma credencial fica em camada.
 #   docker buildx build --ssh core --ssh packs --target runtime -t agentic-deploy .
@@ -29,7 +30,7 @@ ENV UV_LINK_MODE=copy \
 ARG CORE_REPO=ssh://git@github.com/CaioFerreiraB/agentic-app.git
 # Tag (ou branch) do agentic-app. O clone é raso e sem submódulos: o agentic-app liga os packs como submódulos, e a
 # identidade `core` só lê o próprio agentic-app.
-ARG CORE_REF=v0.6.0-rc2
+ARG CORE_REF=v0.6.0-rc6
 RUN --mount=type=ssh,id=core \
     git clone --quiet --depth 1 --branch "${CORE_REF}" "${CORE_REPO}" /src/agentic-app
 RUN uv venv /opt/ai-core \
@@ -70,3 +71,18 @@ ENV PATH=/opt/ai-core/bin:$PATH \
 USER ai-core
 EXPOSE 8000
 CMD ["ai-core", "serve"]
+
+# --- A console de administração (spec 013; research R46): só é construída quando o alvo `console` é pedido ------------
+FROM node:24.20.0-bookworm-slim AS console-build
+# A mesma CORE_REF do core: a console fala com a API de administração daquela versão.
+COPY --from=core /src/agentic-app/ai-core/console /src/console
+WORKDIR /src/console
+RUN npm ci --no-audit --no-fund && npm run build
+
+FROM nginxinc/nginx-unprivileged:1.28.0-alpine AS console
+# O envsubst da imagem renderiza o template em /etc/nginx/conf.d na subida; só as variáveis AI_CORE_* são trocadas.
+ENV NGINX_ENVSUBST_FILTER=AI_CORE_ \
+    AI_CORE_UPSTREAM=http://ai-core:8000
+COPY --from=console-build /src/console/dist /usr/share/nginx/html
+COPY --from=console-build /src/console/deploy/nginx.conf.template /etc/nginx/templates/default.conf.template
+EXPOSE 8080

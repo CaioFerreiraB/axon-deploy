@@ -52,8 +52,14 @@ Repita a ingestão quando o corpus mudar (ela reaproveita o que não mudou). O Q
 do Qdrant: opcional; se usar, o mesmo valor em `QDRANT_API_KEY` e `AI_SCOUTING_QDRANT_API_KEY` no `.env`.
 
 Trocar ou acrescentar um pack: mudar o `PACKS` (no `Dockerfile` ou com `--build-arg`) e o `config/packs.yaml`, e
-rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.6.0-rc2`: o provedor de identidade da plataforma e a
-administração por grupo, além de `rag_first`, harness de avaliação, fila e a timeline de status no Open WebUI).
+rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.6.0-rc6`: o provedor de identidade da plataforma, a administração
+por grupo e a console, o custo informado pelo OpenRouter no uso — sem preço cadastrado — e a escolha de provedor na
+console (ADR-035), o custo parcial visível, nenhum preço de tabela para o OpenRouter e o gráfico de uso por custo,
+requisições ou tokens (ADR-036), além de `rag_first`, harness de avaliação, fila e a timeline de status no Open WebUI).
+
+Os Assistants `geral` e `scouting` declaram `overrides` no `config/assistants.yaml`: a console troca os modelos dos dois
+(e os MCPs do `geral`), sempre dentro da allowlist do YAML (`openrouter/*`). Mudar o YAML de uma seção sobreposta
+desativa a sobreposição no deploy seguinte (ADR-032).
 
 ## Open WebUI (perfil `webui`)
 

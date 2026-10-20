@@ -8,6 +8,9 @@ assistants:
     # Sem `flow`: roda no preferido do pack, rag_first (spec 101 US5); a coleção scouting libera a tool de busca.
     packs: [scouting]
     collections: [scouting]
+    # A console pode trocar o modelo de geração (spec 003 US10, ADR-032), dentro da allowlist abaixo; os packs e a
+    # coleção só mudam por deploy.
+    overrides: [models]
     models:
       generation: openrouter/nvidia/nemotron-3-super-120b-a12b:free
       allow: ["openrouter/*"]
@@ -18,6 +21,8 @@ assistants:
       allow: ["*"]
     flow: agentic
     packs: [generic]
+    # A console pode trocar os modelos e os servidores MCP deste Assistant (spec 003 US10, ADR-032).
+    overrides: [models, mcp]
     models:
       generation: openrouter/nvidia/nemotron-3-super-120b-a12b:free
       controller: openrouter/nvidia/nemotron-3-super-120b-a12b:free
