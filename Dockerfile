@@ -30,7 +30,7 @@ ENV UV_LINK_MODE=copy \
 ARG CORE_REPO=ssh://git@github.com/CaioFerreiraB/axon.git
 # Tag (ou branch) do axon. O clone é raso e sem submódulos: o axon liga os packs como submódulos, e a
 # identidade `core` só lê o próprio axon.
-ARG CORE_REF=v0.7.0-rc1
+ARG CORE_REF=v0.7.0-rc2
 RUN --mount=type=ssh,id=core \
     git clone --quiet --depth 1 --branch "${CORE_REF}" "${CORE_REPO}" /src/axon
 RUN uv venv /opt/axon \

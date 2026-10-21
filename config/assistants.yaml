@@ -8,9 +8,9 @@ assistants:
     # Sem `flow`: roda no preferido do pack, rag_first (spec 101 US5); a coleção scouting libera a tool de busca.
     packs: [scouting]
     collections: [scouting]
-    # A console pode trocar o modelo de geração (spec 003 US10, ADR-032), dentro da allowlist abaixo; os packs e a
-    # coleção só mudam por deploy.
-    overrides: [models]
+    # A console pode trocar o modelo de geração (spec 003 US10, ADR-032), dentro da allowlist abaixo, e quem usa o
+    # Assistant (003 US13, ADR-040); os packs e a coleção só mudam por deploy.
+    overrides: [models, auth]
     models:
       generation: openrouter/z-ai/glm-5.3-flash
       allow: ["openrouter/*"]
@@ -21,8 +21,9 @@ assistants:
       allow: ["*"]
     flow: agentic
     packs: [generic]
-    # A console pode trocar os modelos e os servidores MCP deste Assistant (spec 003 US10, ADR-032).
-    overrides: [models, mcp]
+    # A console pode trocar os modelos, os servidores MCP (spec 003 US10, ADR-032) e quem usa este Assistant (003 US13,
+    # ADR-040).
+    overrides: [models, mcp, auth]
     models:
       generation: openrouter/z-ai/glm-5.3-flash
       controller: openrouter/z-ai/glm-5.3-flash
@@ -31,6 +32,8 @@ assistants:
   # Assistants (008 US8 cen. 2). Nas contas de desenvolvimento (scripts/dev-users.sh), a `bia` é do grupo; a `ana`, não.
   interno:
     visibility: private
+    # A console pode trocar quem usa (003 US13, ADR-040): sistemas, grupos ou pessoas, nunca `*` (privado).
+    overrides: [auth]
     auth:
       schemes: [oidc]
       allow: ["group:equipe"]
