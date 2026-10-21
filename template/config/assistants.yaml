@@ -1,0 +1,17 @@
+# Assistants de sistema desta instalação (spec 003, contracts/assistants-yaml.md). Vai para a imagem; o dia a dia
+# (modelos, servidores MCP, quem usa) muda pela console, nas seções liberadas em `overrides` (ADR-032, ADR-040).
+assistants:
+  geral:
+    visibility: public
+    auth:
+      schemes: [oidc, api_key]
+      allow: ["*"]
+    flow: chat
+    packs: [generic]
+    overrides: [models, auth]
+    models:
+      # Troque pelo modelo da sua instalação (provedor/modelo; spec 006). O OpenRouter lê AXON_OPENROUTER_API_KEY.
+      generation: openrouter/openai/gpt-4.1-nano
+      allow: ["openrouter/*"]
+api_keys:
+  admin_group: admin
