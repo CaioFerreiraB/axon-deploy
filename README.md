@@ -68,3 +68,7 @@ configuração, release pelo CI e deploy no Portainer CE.
 
 Os dois workflows leem o `axon` pela deploy key só de leitura do segredo `AGENTIC_APP_DEPLOY_KEY`. O nome é de antes do
 ADR-037. O `images.yml` publica com o `GITHUB_TOKEN` (`packages: write`). A prova não lê nenhum pack privado.
+
+## Licença
+
+[MIT](LICENSE).
