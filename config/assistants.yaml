@@ -12,7 +12,7 @@ assistants:
     # coleção só mudam por deploy.
     overrides: [models]
     models:
-      generation: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      generation: openrouter/z-ai/glm-5.3-flash
       allow: ["openrouter/*"]
   geral:
     visibility: public
@@ -24,8 +24,8 @@ assistants:
     # A console pode trocar os modelos e os servidores MCP deste Assistant (spec 003 US10, ADR-032).
     overrides: [models, mcp]
     models:
-      generation: openrouter/nvidia/nemotron-3-super-120b-a12b:free
-      controller: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      generation: openrouter/z-ai/glm-5.3-flash
+      controller: openrouter/z-ai/glm-5.3-flash
       allow: ["openrouter/*"]
   # Só para o grupo `equipe` (spec 002 R39): é o que prova, no Open WebUI, que cada usuário vê só os próprios
   # Assistants (008 US8 cen. 2). Nas contas de desenvolvimento (scripts/dev-users.sh), a `bia` é do grupo; a `ana`, não.
@@ -37,7 +37,7 @@ assistants:
     flow: chat
     packs: [generic]
     models:
-      generation: openrouter/nvidia/nemotron-3-super-120b-a12b:free
+      generation: openrouter/z-ai/glm-5.3-flash
       allow: ["openrouter/*"]
 api_keys:
   admin_group: admin
