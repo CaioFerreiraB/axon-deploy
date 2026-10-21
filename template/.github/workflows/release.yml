@@ -6,8 +6,7 @@
 # leitura, e o GITHUB_TOKEN basta para baixá-las e para publicar a imagem desta instalação.
 # Segredo do repositório:
 #   PACKS_DEPLOY_KEY  chave SSH só de leitura dos repositórios de packs privados (sem pack privado, não cadastre)
-# Variável do repositório:
-#   PACKS             os requisitos dos packs, como no build-arg do Dockerfile
+# Os packs são os do `ARG PACKS` do Dockerfile: a fonte única, para o CI e o build local darem a mesma imagem.
 name: release
 
 on:
@@ -54,7 +53,6 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          build-args: PACKS=${{ vars.PACKS }}
           ssh: ${{ steps.keys.outputs.ssh }}
       - name: Apagar a chave
         if: always()

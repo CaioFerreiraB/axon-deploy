@@ -1,14 +1,13 @@
 # Para rodar na máquina do operador (spec 002 FR-033): build local da imagem da instalação, portas no host e uma rede
 # de proxy própria, criada pelo compose.
 #   docker compose -f compose.yml -f compose.local.yml up --build
-# PACKS e a identidade SSH `packs` só são necessários com packs privados (o agente SSH responde por ela).
+# Os packs são os do `ARG PACKS` do Dockerfile; a identidade SSH `packs` só é necessária com packs privados (o agente
+# SSH responde por ela). Com `COMPOSE_FILE=compose.yml:compose.local.yml` no .env, basta `docker compose up --build`.
 services:
   axon:
     image: axon-instalacao:local
     build:
       context: .
-      args:
-        PACKS: ${PACKS:-}
       ssh:
         - packs=${SSH_AUTH_SOCK:-}
     ports:

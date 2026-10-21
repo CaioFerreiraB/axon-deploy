@@ -15,7 +15,8 @@ FROM ${AXON_REGISTRY}/axon-build:${AXON_VERSION} AS packs
 COPY config/packs.yaml /etc/axon/packs.yaml
 # Requisitos separados por espaço: PyPI, URL de git (nome@git+ssh://…@commit) ou caminho em /build/packages.
 # `--no-sources`: vale só o que está listado — o [tool.uv.sources] de um pack é ignorado, e os contratos da imagem
-# base atendem a faixa dele. Vazio: só o axon-generic, que já está na imagem base.
+# base atendem a faixa dele. Vazio: só o axon-generic, que já está na imagem base. É a fonte única dos packs: o CI e o
+# compose.local.yml não o sobrescrevem.
 ARG PACKS=""
 RUN --mount=type=ssh,id=packs \
     --mount=type=bind,source=packages,target=/build/packages \

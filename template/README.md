@@ -17,9 +17,9 @@ os packs dependem. Foi criado a partir do modelo em `template/` do
 
 - **Versão**: `ARG AXON_VERSION` no `Dockerfile` (a tag das imagens base; a do `axon` sem o `v`) e a tag da
   `axon-console` no `compose.yml` — as duas sempre iguais.
-- **Packs**: a variável `PACKS` do repositório (no CI) ou do `.env` (local) — requisitos separados por espaço, do PyPI,
-  de um repositório git (`nome@git+ssh://git@github.com/dono/repo.git@<commit>`) ou de `packages/` (`/build/packages/x`)
-  — e a entrada de cada um em `config/packs.yaml`. Os dados de cada pack (um modelo, um índice) são preparados no
+- **Packs**: o `ARG PACKS` do `Dockerfile` — requisitos separados por espaço, do PyPI, de um repositório git
+  (`nome@git+ssh://git@github.com/dono/repo.git@<commit>`) ou de `packages/` (`/build/packages/x`) — e a entrada de cada
+  um em `config/packs.yaml`. O CI e o build local usam esse mesmo valor. Os dados de cada pack (um modelo, um índice) são preparados no
   build pelo próprio pack, em `/opt/axon-data/<pack>`.
 - **Serviços de packs**: se um pack precisa de um serviço (um banco de vetores, por exemplo), o README do pack diz qual;
   acrescente-o ao `compose.yml`, e os segredos dele à lista `environment` do serviço `axon`.
@@ -27,8 +27,8 @@ os packs dependem. Foi criado a partir do modelo em `template/` do
 ## Rodar na máquina
 
 ```bash
-cp .env.example .env    # preencha
-docker compose -f compose.yml -f compose.local.yml up --build
+cp .env.example .env    # preencha, e acrescente COMPOSE_FILE=compose.yml:compose.local.yml
+docker compose up --build
 docker compose exec axon axon users create admin --email admin@exemplo.org --group admin
 ```
 

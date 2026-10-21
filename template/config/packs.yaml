@@ -1,6 +1,6 @@
 # Packs habilitados nesta instalação (spec 002, contracts/packs-yaml.md). Vai para a imagem: o build prepara e valida
-# exatamente o que roda. Habilitar um pack é instalá-lo pelo build-arg PACKS e citá-lo aqui, com a configuração dele
-# (validada pelo config_schema do pack no build e no boot). Segredos de pack nunca aqui: no ambiente da stack.
+# exatamente o que roda. Habilitar um pack é instalá-lo pelo `ARG PACKS` do Dockerfile e citá-lo aqui, com a configuração
+# dele (validada pelo config_schema do pack no build e no boot). Segredos de pack nunca aqui: no ambiente da stack.
 packs:
   generic:
     enabled: true
