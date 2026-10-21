@@ -2,6 +2,11 @@
 # axon-console no GHCR do dono do axon, com a tag do git sem o "v" (v0.7.0-rc4 → 0.7.0-rc4). Imutável: uma tag que já
 # existe no registry não é publicada de novo, e não há `latest`. Antes de publicar, roda a prova (scripts/check-build.sh)
 # sobre a mesma tag.
+#
+# Multi-arch (amd64 e arm64): há instalação em VM arm64 (Ampere), onde uma imagem só amd64 morre em `exec format error`.
+# Cada arquitetura builda e prova num runner nativo (sem QEMU: o build do core e da console ficaria lento demais) e
+# publica `<versão>-<arch>`; o job `manifest` junta as duas na tag `<versão>`, que é a que as instalações usam. As tags
+# por arquitetura são intermediárias: a imutabilidade vale para a tag final, e repetir uma perna que falhou as regrava.
 name: images
 
 on:
@@ -16,23 +21,21 @@ permissions:
   packages: write
 
 jobs:
-  publish:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      registry: ${{ steps.version.outputs.registry }}
     env:
       CORE_REF: ${{ inputs.core_ref }}
     steps:
-      - uses: actions/checkout@v5
       - name: Versão das imagens
         id: version
         run: |
           [[ "$CORE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "não é uma tag v<versão>: $CORE_REF"; exit 1; }
           echo "version=${CORE_REF#v}" >> "$GITHUB_OUTPUT"
           echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
-      # O driver docker: o check-build.sh constrói o modelo de instalação FROM as imagens base recém-construídas, do
-      # armazenamento local do daemon.
       - uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -48,6 +51,34 @@ jobs:
               echo "$REGISTRY/$image:$VERSION já existe: as imagens base são imutáveis"; exit 1
             fi
           done
+
+  publish:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      CORE_REF: ${{ inputs.core_ref }}
+      REGISTRY: ${{ needs.version.outputs.registry }}
+      VERSION: ${{ needs.version.outputs.version }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v5
+      # O driver docker: o check-build.sh constrói o modelo de instalação FROM as imagens base recém-construídas, do
+      # armazenamento local do daemon.
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Gravar a deploy key do axon
         env:
           AGENTIC_APP_DEPLOY_KEY: ${{ secrets.AGENTIC_APP_DEPLOY_KEY }}
@@ -58,17 +89,34 @@ jobs:
       - name: Construir e provar (check-build.sh)
         env:
           SSH_CORE: ${{ runner.temp }}/keys/core
-          REGISTRY: ${{ steps.version.outputs.registry }}
-          VERSION: ${{ steps.version.outputs.version }}
         run: scripts/check-build.sh
-      - name: Publicar
-        env:
-          REGISTRY: ${{ steps.version.outputs.registry }}
-          VERSION: ${{ steps.version.outputs.version }}
+      - name: Publicar a arquitetura
         run: |
           for image in axon-build axon-runtime axon-console; do
-            docker push "$REGISTRY/$image:$VERSION"
+            docker tag "$REGISTRY/$image:$VERSION" "$REGISTRY/$image:$VERSION-$ARCH"
+            docker push "$REGISTRY/$image:$VERSION-$ARCH"
           done
       - name: Apagar as chaves
         if: always()
         run: rm -rf "$RUNNER_TEMP/keys"
+
+  manifest:
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: ${{ needs.version.outputs.registry }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Juntar as arquiteturas na tag da versão
+        run: |
+          for image in axon-build axon-runtime axon-console; do
+            docker buildx imagetools create -t "$REGISTRY/$image:$VERSION" \
+              "$REGISTRY/$image:$VERSION-amd64" "$REGISTRY/$image:$VERSION-arm64"
+            docker buildx imagetools inspect "$REGISTRY/$image:$VERSION"
+          done
