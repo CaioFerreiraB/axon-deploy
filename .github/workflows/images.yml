@@ -1,0 +1,74 @@
+# Publica as imagens base de uma versão do core (spec 002 FR-032; ADR-042, item 2): axon-build, axon-runtime e
+# axon-console no GHCR do dono do axon, com a tag do git sem o "v" (v0.7.0-rc4 → 0.7.0-rc4). Imutável: uma tag que já
+# existe no registry não é publicada de novo, e não há `latest`. Antes de publicar, roda a prova (scripts/check-build.sh)
+# sobre a mesma tag.
+name: images
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_ref:
+        description: "Tag do axon (v<versão>)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CORE_REF: ${{ inputs.core_ref }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Versão das imagens
+        id: version
+        run: |
+          [[ "$CORE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "não é uma tag v<versão>: $CORE_REF"; exit 1; }
+          echo "version=${CORE_REF#v}" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      # O driver docker: o check-build.sh constrói o modelo de instalação FROM as imagens base recém-construídas, do
+      # armazenamento local do daemon.
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: A versão ainda não foi publicada
+        env:
+          REGISTRY: ${{ steps.version.outputs.registry }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for image in axon-build axon-runtime axon-console; do
+            if docker buildx imagetools inspect "$REGISTRY/$image:$VERSION" >/dev/null 2>&1; then
+              echo "$REGISTRY/$image:$VERSION já existe: as imagens base são imutáveis"; exit 1
+            fi
+          done
+      - name: Gravar a deploy key do axon
+        env:
+          AGENTIC_APP_DEPLOY_KEY: ${{ secrets.AGENTIC_APP_DEPLOY_KEY }}
+        run: |
+          install -d -m 700 "$RUNNER_TEMP/keys"
+          printf '%s\n' "$AGENTIC_APP_DEPLOY_KEY" > "$RUNNER_TEMP/keys/core"
+          chmod 600 "$RUNNER_TEMP/keys/core"
+      - name: Construir e provar (check-build.sh)
+        env:
+          SSH_CORE: ${{ runner.temp }}/keys/core
+          REGISTRY: ${{ steps.version.outputs.registry }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/check-build.sh
+      - name: Publicar
+        env:
+          REGISTRY: ${{ steps.version.outputs.registry }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          for image in axon-build axon-runtime axon-console; do
+            docker push "$REGISTRY/$image:$VERSION"
+          done
+      - name: Apagar as chaves
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"

@@ -1,5 +1,5 @@
-# CI da instalação (spec 002 US5; research R27, R28): o Independent Test a cada push.
-# Cada identidade SSH do build usa a deploy key só de leitura do repositório que ela lê.
+# Prova da referência (spec 002 US5; ADR-042): a cada PR e push, as imagens base de uma tag do axon e, sobre elas, o
+# modelo de instalação — com o generic e com o pack incompatível. Nada é publicado aqui (ver images.yml).
 name: build
 
 on:
@@ -13,20 +13,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # O driver docker: o modelo de instalação é construído FROM as imagens base do armazenamento local.
       - uses: docker/setup-buildx-action@v3
-      - name: Gravar as deploy keys
+        with:
+          driver: docker
+      - name: Gravar a deploy key do axon
         env:
           AGENTIC_APP_DEPLOY_KEY: ${{ secrets.AGENTIC_APP_DEPLOY_KEY }}
-          AI_SCOUTING_DEPLOY_KEY: ${{ secrets.AI_SCOUTING_DEPLOY_KEY }}
         run: |
           install -d -m 700 "$RUNNER_TEMP/keys"
           printf '%s\n' "$AGENTIC_APP_DEPLOY_KEY" > "$RUNNER_TEMP/keys/core"
-          printf '%s\n' "$AI_SCOUTING_DEPLOY_KEY" > "$RUNNER_TEMP/keys/packs"
-          chmod 600 "$RUNNER_TEMP/keys/core" "$RUNNER_TEMP/keys/packs"
+          chmod 600 "$RUNNER_TEMP/keys/core"
       - name: Independent Test da US5
         env:
           SSH_CORE: ${{ runner.temp }}/keys/core
-          SSH_PACKS: ${{ runner.temp }}/keys/packs
         run: scripts/check-build.sh
       - name: Apagar as chaves
         if: always()

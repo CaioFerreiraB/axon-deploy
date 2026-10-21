@@ -1,0 +1,150 @@
+# Esta instalação em execução (spec 002 FR-033, FR-034; ADR-042). Só imagens, com tags fixadas: atualizar é um commit
+# que troca a tag. Nenhuma porta publicada e nenhum arquivo montado — a configuração está na imagem, e os segredos vêm
+# do ambiente (no Portainer, as variáveis da stack; localmente, o .env — modelo em .env.example).
+#
+# Modos (COMPOSE_PROFILES): vazio, só a API (chaves de API); webui acrescenta o Open WebUI; console, a console de
+# administração; webui,console sobe os dois. O proxy reverso (Caddy, por exemplo) fica na rede AXON_PROXY_NETWORK e
+# alcança os apelidos axon-console, axon-chat e axon-api.
+#
+# Na máquina do operador, com build e portas: docker compose -f compose.yml -f compose.local.yml up --build
+name: axon
+
+services:
+  axon:
+    # A imagem desta instalação, publicada pelo workflow de release (.github/workflows/release.yml).
+    image: ghcr.io/SEU-USUARIO/SUA-INSTALACAO:sha-0000000
+    environment:
+      # Postgres sempre: contas, chaves de API, Assistants de usuário, conversas e sobreposições sobrevivem a restart.
+      AXON_PROFILE: persistent
+      AXON_DATABASE_URL: postgresql://axon:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/axon
+      AXON_MASTER_KEY: ${AXON_MASTER_KEY:?defina AXON_MASTER_KEY}
+      # O emissor dos tokens é o endereço que o navegador vê (spec 012 FR-019): com a console, o domínio dela, cujo
+      # nginx repassa /v1, /oauth2, /.well-known e /admin/v1 ao core sem reescrever.
+      AXON_PUBLIC_URL: ${AXON_PUBLIC_URL:?defina AXON_PUBLIC_URL}
+      AXON_IDENTITY_ENABLED: ${AXON_IDENTITY_ENABLED:-false}
+      AXON_IDENTITY_SECRET_OPEN_WEBUI: ${AXON_IDENTITY_SECRET_OPEN_WEBUI:-}
+      AXON_DISPLAY_NAME: ${AXON_DISPLAY_NAME:-Axon}
+      # O logotipo, quando houver, vai em config/ (na imagem): /etc/axon/logo.svg.
+      AXON_LOGO_FILE: ${AXON_LOGO_FILE:-}
+      # Os X-Forwarded-* do proxy e do nginx da console valem: as redes privadas do Docker.
+      AXON_TRUSTED_PROXIES: ${AXON_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16,10.0.0.0/8}
+      # Segredos e opcionais. Vazio vale como ausente. Só chega ao contêiner o que está citado aqui: os segredos dos
+      # packs desta instalação (AXON_<PACK>_*) entram nesta lista.
+      AXON_OPENROUTER_API_KEY: ${AXON_OPENROUTER_API_KEY:-}
+      AXON_OPENAI_API_KEY: ${AXON_OPENAI_API_KEY:-}
+      AXON_GOOGLE_CLIENT_ID: ${AXON_GOOGLE_CLIENT_ID:-}
+      AXON_GOOGLE_CLIENT_SECRET: ${AXON_GOOGLE_CLIENT_SECRET:-}
+      AXON_GOOGLE_HOSTED_DOMAIN: ${AXON_GOOGLE_HOSTED_DOMAIN:-}
+      AXON_LANGFUSE_HOST: ${AXON_LANGFUSE_HOST:-}
+      AXON_LANGFUSE_PUBLIC_KEY: ${AXON_LANGFUSE_PUBLIC_KEY:-}
+      AXON_LANGFUSE_SECRET_KEY: ${AXON_LANGFUSE_SECRET_KEY:-}
+    networks:
+      default:
+      proxy:
+        aliases: [axon-api]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Nenhuma instalação em runtime (FR-014): sistema de arquivos somente leitura, com /tmp em memória.
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  # O banco da plataforma. Só na rede da instalação.
+  postgres:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: axon
+      POSTGRES_DB: axon
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U axon -d axon"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # A console de administração (spec 013): o nginx serve a SPA e repassa os prefixos do core. O domínio dela é o
+  # AXON_PUBLIC_URL.
+  console:
+    profiles: [console]
+    image: ghcr.io/caioferreirab/axon-console:0.7.0-rc4
+    environment:
+      AXON_UPSTREAM: http://axon:8000
+    networks:
+      default:
+      proxy:
+        aliases: [axon-console]
+    depends_on:
+      - axon
+    # Somente leitura: o envsubst renderiza em /etc/nginx/conf.d e o nginx escreve em /tmp, em memória e do uid 101.
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101,mode=0755
+      - /etc/nginx/conf.d:uid=101,gid=101,mode=0755
+    restart: unless-stopped
+
+  # O chat (spec 008 US8): login pela plataforma (cliente confidencial `open-webui` do config/identity.yaml), o token de
+  # cada usuário repassado ao /v1 (system_oauth), x-axon-store: false (o histórico é do Open WebUI) e
+  # x-axon-progress: status (a timeline de status). Cada mensagem é uma execução da plataforma.
+  open-webui:
+    profiles: [webui]
+    image: ghcr.io/open-webui/open-webui:v0.12.0
+    environment:
+      WEBUI_URL: ${AXON_CHAT_URL:?defina AXON_CHAT_URL}
+      WEBUI_NAME: ${AXON_DISPLAY_NAME:-Axon}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?defina WEBUI_SECRET_KEY}
+      ENABLE_PERSISTENT_CONFIG: "false"
+      ENABLE_OLLAMA_API: "false"
+      ENABLE_OPENAI_API: "true"
+      OPENAI_API_BASE_URLS: http://axon:8000/v1
+      OPENAI_API_CONFIGS: >-
+        {"0": {"enable": true, "auth_type": "system_oauth", "connection_type": "external",
+        "headers": {"x-axon-store": "false", "x-axon-progress": "status"}}}
+      BYPASS_MODEL_ACCESS_CONTROL: "true"
+      # Nenhum `tools` vai à plataforma (as capacidades vêm do Assistant): chamada de função legada e sem as
+      # ferramentas embutidas do Open WebUI.
+      DEFAULT_MODEL_PARAMS: '{"function_calling": "legacy"}'
+      DEFAULT_MODEL_METADATA: '{"capabilities": {"builtin_tools": false}}'
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_FOLLOW_UP_GENERATION: "false"
+      ENABLE_AUTOCOMPLETE_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
+      ENABLE_RETRIEVAL_QUERY_GENERATION: "false"
+      ENABLE_OAUTH_SIGNUP: "true"
+      DEFAULT_USER_ROLE: user
+      # A sessão do Open WebUI vence antes da do provedor (30 dias): depois, ele não renova o token que repassa.
+      JWT_EXPIRES_IN: ${OPEN_WEBUI_SESSION_EXPIRES_IN:-29d}
+      ENABLE_LOGIN_FORM: "false"
+      OAUTH_PROVIDER_NAME: ${AXON_DISPLAY_NAME:-Axon}
+      # A descoberta pelo endereço interno: ela responde o emissor público e os endpoints de servidor pelo endereço
+      # pelo qual chegou (spec 012 R8).
+      OPENID_PROVIDER_URL: http://axon:8000/.well-known/openid-configuration
+      OAUTH_CLIENT_ID: open-webui
+      OAUTH_CLIENT_SECRET: ${AXON_IDENTITY_SECRET_OPEN_WEBUI:-}
+      OAUTH_SCOPES: openid email profile groups offline_access
+      OAUTH_CODE_CHALLENGE_METHOD: S256
+      OPENID_REDIRECT_URI: ${AXON_CHAT_URL:?defina AXON_CHAT_URL}/oauth/oidc/callback
+    volumes:
+      - open-webui-data:/app/backend/data
+    networks:
+      default:
+      proxy:
+        aliases: [axon-chat]
+    depends_on:
+      - axon
+    restart: unless-stopped
+
+networks:
+  # A rede do proxy reverso, criada fora desta stack (docker network create <nome>).
+  proxy:
+    external: true
+    name: ${AXON_PROXY_NETWORK:?defina AXON_PROXY_NETWORK}
+
+volumes:
+  postgres-data:
+  open-webui-data:

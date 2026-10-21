@@ -1,0 +1,5 @@
+# O packs.yaml das imagens base (spec 002 FR-032; ADR-042): só o pack de referência. A instalação o troca pelo dela
+# (template/config/packs.yaml).
+packs:
+  generic:
+    enabled: true

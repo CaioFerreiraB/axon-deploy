@@ -1,63 +1,92 @@
 #!/usr/bin/env bash
-# Independent Test da US5 (spec 002; research R27; contracts/installation.md): pack compatível builda; pack
-# incompatível falha no `packs check`; o runtime não instala nada.
+# Prova da referência (spec 002 US5, FR-032, FR-033; ADR-041, ADR-042; contracts/installation.md): as imagens base de
+# uma tag do axon e, sobre elas, o modelo de instalação. Pack compatível builda; pack incompatível falha no
+# `packs check`; o runtime não instala nada; nada de pack além do generic.
 #
-#   SSH_CORE, SSH_PACKS  arquivo de chave de cada identidade SSH do build (default: o agente SSH)
-#   CORE_REF             tag ou branch do axon (default: a do Dockerfile)
-#   IMAGE                nome da imagem de teste (default: axon:check)
+#   SSH_CORE  arquivo de chave da identidade `core` do build (default: o agente SSH)
+#   CORE_REF  tag (ou branch) do axon (default: a do AXON_VERSION de template/Dockerfile, com "v")
+#   REGISTRY  prefixo das imagens base (default: axon-check, só local); VERSION, a tag delas (default: CORE_REF sem "v")
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-IMAGE="${IMAGE:-axon:check}"
-build_args=(--ssh "core${SSH_CORE:+=$SSH_CORE}" --ssh "packs${SSH_PACKS:+=$SSH_PACKS}")
-[[ -n "${CORE_REF:-}" ]] && build_args+=(--build-arg "CORE_REF=$CORE_REF")
-default_packs=$(sed -n 's/^ARG PACKS="\(.*\)"$/\1/p' Dockerfile)
+template_version=$(sed -n 's/^ARG AXON_VERSION=\(.*\)$/\1/p' template/Dockerfile)
+CORE_REF="${CORE_REF:-v$template_version}"
+REGISTRY="${REGISTRY:-axon-check}"
+VERSION="${VERSION:-${CORE_REF#v}}"
+INSTALLATION="axon-instalacao:check"
+ssh_core=(--ssh "core${SSH_CORE:+=$SSH_CORE}")
+base_args=(--build-arg "CORE_REF=$CORE_REF")
+template_args=(--build-arg "AXON_REGISTRY=$REGISTRY" --build-arg "AXON_VERSION=$VERSION")
 
 step() { printf '\n== %s\n' "$*"; }
-# Os comandos `axon` sobem a configuração inteira: o assistants.yaml é montado, como na execução real.
-axon() { docker run --rm -v "$PWD/config/assistants.yaml:/etc/axon/assistants.yaml:ro" "$IMAGE" axon "$@"; }
 fail() { printf '\nFALHOU: %s\n' "$*" >&2; exit 1; }
+in_image() { local image=$1; shift; docker run --rm "$image" "$@"; }
 
-step "1. build com os packs default (US5 cen. 1)"
-docker buildx build "${build_args[@]}" --target runtime --load -t "$IMAGE" .
+step "1. imagens base de $CORE_REF ($REGISTRY/axon-{build,runtime,console}:$VERSION)"
+for target in build runtime console; do
+  docker buildx build "${ssh_core[@]}" "${base_args[@]}" --target "$target" --load \
+    -t "$REGISTRY/axon-$target:$VERSION" images
+done
 
-step "2. os packs estão habilitados na imagem"
-list=$(axon packs list)
+step "2. a imagem de runtime base roda sozinha, só com o generic (US5 cen. 4)"
+base="$REGISTRY/axon-runtime:$VERSION"
+list=$(in_image "$base" axon packs list)
 echo "$list"
-grep -Eq '^generic .* enabled' <<<"$list" || fail "generic não está enabled"
-grep -Eq '^scouting .* enabled' <<<"$list" || fail "scouting não está enabled"
+grep -Eq '^generic .* enabled' <<<"$list" || fail "generic não está enabled na imagem base"
+[[ $(grep -c . <<<"$list") -eq 1 ]] || fail "a imagem base tem pack além do generic"
+in_image "$base" test -d /opt/axon-data/generic || fail "a raiz de dados da imagem base não foi preparada"
 
-step "2b. o modelo de embedding do scouting e a CLI do corpus estão na imagem"
-docker run --rm "$IMAGE" test -f /opt/axon-scouting/e5-small/model.onnx -a -f /opt/axon-scouting/e5-small/tokenizer.json \
-  || fail "o modelo do scouting não está em /opt/axon-scouting/e5-small"
-docker run --rm "$IMAGE" axon-scouting-corpus --help >/dev/null || fail "axon-scouting-corpus não roda na imagem"
-echo "modelo em /opt/axon-scouting/e5-small; axon-scouting-corpus disponível"
-
-step "3. os Assistants da instalação validam"
-axon assistants validate || fail "assistants validate reprovou config/assistants.yaml"
+step "3. o modelo de instalação, sem mudança, sobre as imagens base (US5 cen. 1, 5)"
+docker buildx build "${template_args[@]}" --load -t "$INSTALLATION" template
+list=$(in_image "$INSTALLATION" axon packs list)
+echo "$list"
+grep -Eq '^generic .* enabled' <<<"$list" || fail "generic não está enabled na instalação"
+for file in packs.yaml assistants.yaml identity.yaml; do
+  in_image "$INSTALLATION" test -f "/etc/axon/$file" || fail "/etc/axon/$file não está na imagem"
+done
+in_image "$INSTALLATION" test -d /opt/axon-data/generic || fail "a raiz de dados não veio do estágio de build"
+in_image "$INSTALLATION" axon assistants validate || fail "assistants validate reprovou template/config/assistants.yaml"
 
 step "3b. variáveis com o nome antigo não sobem (US7 cen. 6; ADR-037)"
-if output=$(docker run --rm -e AI_CORE_PROFILE=memory "$IMAGE" axon packs list 2>&1); then
+if output=$(docker run --rm -e AI_CORE_PROFILE=memory "$INSTALLATION" axon packs list 2>&1); then
   fail "a imagem aceitou AI_CORE_PROFILE"
 fi
 grep -q 'AI_CORE_PROFILE → AXON_PROFILE' <<<"$output" || { echo "$output"; fail "a recusa não nomeou AXON_PROFILE"; }
 echo "recusada: AI_CORE_PROFILE → AXON_PROFILE"
 
 step "4. nenhuma instalação em runtime (US5 cen. 3)"
-if docker run --rm "$IMAGE" sh -c 'command -v uv'; then fail "uv presente no runtime"; fi
-if docker run --rm "$IMAGE" sh -c 'command -v pip || python -m pip --version'; then fail "pip presente no runtime"; fi
-if docker run --rm "$IMAGE" python -m ensurepip --version 2>/dev/null; then fail "ensurepip presente no runtime"; fi
-if docker run --rm "$IMAGE" sh -c 'touch /opt/axon/.escrita'; then fail "o usuário do processo escreve em /opt/axon"; fi
-echo "sem uv, pip e ensurepip; /opt/axon somente leitura para o processo"
+for image in "$base" "$INSTALLATION"; do
+  if in_image "$image" sh -c 'command -v uv'; then fail "uv presente em $image"; fi
+  if in_image "$image" sh -c 'command -v pip || python -m pip --version'; then fail "pip presente em $image"; fi
+  if in_image "$image" python -m ensurepip --version 2>/dev/null; then fail "ensurepip presente em $image"; fi
+  for dir in /opt/axon /opt/axon-data /etc/axon; do
+    if in_image "$image" sh -c "touch $dir/.escrita" 2>/dev/null; then fail "o processo escreve em $dir ($image)"; fi
+  done
+done
+echo "sem uv, pip e ensurepip; /opt/axon, /opt/axon-data e /etc/axon somente leitura para o processo"
 
 step "5. pack incompatível falha no packs check (US5 cen. 2)"
-if output=$(docker buildx build "${build_args[@]}" --target packs --progress plain \
-    --build-arg "PACKS=$default_packs /build/packages/incompatible-pack" . 2>&1); then
+context=$(mktemp -d)
+trap 'rm -rf "$context"' EXIT
+cp -r template/. "$context"
+cp -r packages/incompatible-pack "$context/packages/"
+if output=$(docker buildx build "${template_args[@]}" --progress plain \
+    --build-arg "PACKS=/build/packages/incompatible-pack" "$context" 2>&1); then
   fail "o build com o pack incompatível passou"
 fi
 grep -q 'axon packs check' <<<"$output" || { tail -30 <<<"$output"; fail "o build falhou antes do packs check"; }
 grep -Eq 'incompatible .* error' <<<"$output" || { tail -30 <<<"$output"; fail "o packs check não nomeou o pack incompatível"; }
-if grep -Eq 'scouting .* error' <<<"$output"; then fail "o scouting apareceu em erro"; fi
 grep -E 'incompatible .* error' <<<"$output" | tail -1
 
-printf '\nOK: a instalação builda com packs compatíveis, recusa o incompatível e não instala nada em runtime.\n'
+step "6. a console da mesma tag e o compose do modelo"
+in_image "$REGISTRY/axon-console:$VERSION" test -f /usr/share/nginx/html/index.html || fail "a SPA não está na console"
+env_file="$context/check.env"
+printf '%s\n' AXON_PROXY_NETWORK=proxy POSTGRES_PASSWORD=x AXON_MASTER_KEY=x AXON_PUBLIC_URL=https://axon.test \
+  AXON_CHAT_URL=https://chat.test WEBUI_SECRET_KEY=x COMPOSE_PROFILES=webui,console > "$env_file"
+docker compose --env-file "$env_file" -f template/compose.yml config --quiet || fail "template/compose.yml inválido"
+docker compose --env-file "$env_file" -f template/compose.yml -f template/compose.local.yml config --quiet \
+  || fail "template/compose.local.yml inválido"
+if grep -nE '^\s+(ports|build):' template/compose.yml; then fail "template/compose.yml publica porta ou tem build"; fi
+echo "console com a SPA; compose do modelo válido, só com imagens e sem porta publicada"
+
+printf '\nOK: imagens base %s, modelo de instalação sobre elas, incompatível recusado, nada instalado em runtime.\n' "$VERSION"

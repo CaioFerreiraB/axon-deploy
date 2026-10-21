@@ -1,4 +1,6 @@
 .env
 __pycache__/
 *.egg-info/
-config/*.local.yaml
+# Restos locais da instalação que morava aqui antes do ADR-042 (saem no passo 4, com o repositório da instalação).
+config/
+secrets/

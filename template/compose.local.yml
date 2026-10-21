@@ -1,0 +1,26 @@
+# Para rodar na máquina do operador (spec 002 FR-033): build local da imagem da instalação, portas no host e uma rede
+# de proxy própria, criada pelo compose.
+#   docker compose -f compose.yml -f compose.local.yml up --build
+# PACKS e a identidade SSH `packs` só são necessários com packs privados (o agente SSH responde por ela).
+services:
+  axon:
+    image: axon-instalacao:local
+    build:
+      context: .
+      args:
+        PACKS: ${PACKS:-}
+      ssh:
+        - packs=${SSH_AUTH_SOCK:-}
+    ports:
+      - "${AXON_HOST_PORT:-8000}:8000"
+  console:
+    ports:
+      - "${CONSOLE_HOST_PORT:-8080}:8080"
+  open-webui:
+    ports:
+      - "${OPEN_WEBUI_HOST_PORT:-3000}:8080"
+
+networks:
+  proxy:
+    external: false
+    name: axon-local-proxy
