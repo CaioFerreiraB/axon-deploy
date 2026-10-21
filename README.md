@@ -52,7 +52,7 @@ Repita a ingestão quando o corpus mudar (ela reaproveita o que não mudou). O Q
 do Qdrant: opcional; se usar, o mesmo valor em `QDRANT_API_KEY` e `AXON_SCOUTING_QDRANT_API_KEY` no `.env`.
 
 Trocar ou acrescentar um pack: mudar o `PACKS` (no `Dockerfile` ou com `--build-arg`) e o `config/packs.yaml`, e
-rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.7.0-rc2`: as chaves de API e as permissões dos Assistants pela console, com rotação do segredo
+rebuildar. Trocar a versão do core: `CORE_REF` (hoje `v0.7.0-rc3`: `axon health` com a identidade conferida na própria sessão; as chaves de API e as permissões dos Assistants pela console, com rotação do segredo
 (ADR-040); os nomes da Axon (ADR-037) e a marca nas páginas e
 na console (ADR-038); o provedor de identidade da plataforma, a administração por grupo e a console, o custo informado pelo OpenRouter no uso — sem preço cadastrado — e a escolha de provedor na
 console (ADR-035), o custo parcial visível, nenhum preço de tabela para o OpenRouter e o gráfico de uso por custo,
