@@ -1,14 +1,14 @@
-# Pack de teste da US5 cen. 2 (spec 002, research R26): instala sobre os contratos 0.1 (a faixa aceita), mas declara
-# `contract_version = "0.2"` — o `ai-core packs check` o reprova, e o build falha na validação de packs, não na
+# Pack de teste da US5 cen. 2 (spec 002, research R26, R58): instala sobre os contratos 0.2 (a faixa aceita), mas
+# declara `contract_version = "0.3"` — o `axon packs check` o reprova, e o build falha na validação de packs, não na
 # resolução de dependências. Nunca entra no PACKS default.
 [project]
 name = "incompatible-pack"
 version = "0.1.0"
 description = "Pack incompatível de propósito: prova que o build da instalação o recusa."
 requires-python = ">=3.12"
-dependencies = ["ai-core-contracts>=0.1,<0.3"]
+dependencies = ["axon-ai-contracts>=0.2,<0.4"]
 
-[project.entry-points."ai_core.packs"]
+[project.entry-points."axon.packs"]
 incompatible = "incompatible_pack:IncompatiblePack"
 
 [build-system]

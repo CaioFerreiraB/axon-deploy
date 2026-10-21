@@ -1,25 +1,25 @@
 # Clientes do provedor de identidade da plataforma (spec 012, contracts/identity-yaml.md; 002 R45). Montado somente
-# leitura em /etc/ai-core/identity.yaml; vale só com AI_CORE_IDENTITY_ENABLED=true.
+# leitura em /etc/axon/identity.yaml; vale só com AXON_IDENTITY_ENABLED=true.
 #
 # Os endereços de retorno são comparados byte a byte: em produção, troque `localhost` e as portas pelos endereços que
-# o navegador usa (e mantenha AI_CORE_PUBLIC_URL, OPEN_WEBUI_HOST_PORT e CONSOLE_HOST_PORT do .env coerentes).
+# o navegador usa (e mantenha AXON_PUBLIC_URL, OPEN_WEBUI_HOST_PORT e CONSOLE_HOST_PORT do .env coerentes).
 version: 1
 clients:
-  # O Open WebUI (perfil webui): confidencial, com o segredo em AI_CORE_IDENTITY_SECRET_OPEN_WEBUI (no .env, o mesmo
-  # valor que o Open WebUI recebe). Os tokens dele valem só no chat (/v1, audiência ai-core).
+  # O Open WebUI (perfil webui): confidencial, com o segredo em AXON_IDENTITY_SECRET_OPEN_WEBUI (no .env, o mesmo
+  # valor que o Open WebUI recebe). Os tokens dele valem só no chat (/v1, audiência axon).
   open-webui:
     type: confidential
     secret: open_webui
-    audience: ai-core
+    audience: axon
     redirect_uris:
       - http://localhost:3000/oauth/oidc/callback
     post_logout_redirect_uris:
       - http://localhost:3000/auth
   # A console de administração (spec 013, perfil console): pública, com PKCE; os tokens dela valem só na
-  # administração (/admin/v1, audiência ai-core-admin — ADR-031).
+  # administração (/admin/v1, audiência axon-admin — ADR-031).
   console:
     type: public
-    audience: ai-core-admin
+    audience: axon-admin
     redirect_uris:
       - http://localhost:8080/callback
     post_logout_redirect_uris:

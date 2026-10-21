@@ -8,13 +8,13 @@ de modelos de cada uma e manda uma mensagem pelo próprio Open WebUI, que chega 
 
   1. a `bia` (grupo equipe) vê o Assistant `interno`; a `ana`, não — e as duas veem os públicos (US8 cen. 1–2);
   2. a mensagem, montada como a tela de chat a monta, volta respondida pela plataforma (US8 cen. 3);
-  3. o log de acesso do ai-core mostra exatamente um POST /v1/chat/completions — nenhuma tarefa auxiliar (cen. 4);
-  4. esse pedido foi aceito (200): sem o campo `tools` e efêmero, com x-ai-core-store: false (cen. 5);
+  3. o log de acesso do axon mostra exatamente um POST /v1/chat/completions — nenhuma tarefa auxiliar (cen. 4);
+  4. esse pedido foi aceito (200): sem o campo `tools` e efêmero, com x-axon-store: false (cen. 5);
   5. a timeline de status chegou e ficou gravada na mensagem (`statusHistory`), da preparação à linha de conclusão
-     (008 FR-005a, x-ai-core-progress: status).
+     (008 FR-005a, x-axon-progress: status).
 
 Só biblioteca padrão; lê a senha de desenvolvimento do .env (DEV_USERS_PASSWORD) sem exibi-la. Rode da raiz do
-agentic-deploy.
+axon-deploy.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class Session:
 
     def __init__(self, user: str) -> None:
         self.user = user
-        # Com `AI_CORE_PUBLIC_URL` em https, o cookie de sessão da plataforma é `Secure`; os navegadores o mandam para
+        # Com `AXON_PUBLIC_URL` em https, o cookie de sessão da plataforma é `Secure`; os navegadores o mandam para
         # http://localhost (contexto seguro), mas o cookiejar do Python só por https.
         self.jar = CookieJar(policy=DefaultCookiePolicy(secure_protocols=("https", "wss", "http")))
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
@@ -148,7 +148,7 @@ class Session:
 
 def chat_requests_since(since: str) -> list[str]:
     logs = subprocess.run(
-        ["docker", "compose", "logs", "--no-color", "--since", since, "ai-core"],
+        ["docker", "compose", "logs", "--no-color", "--since", since, "axon"],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -183,14 +183,14 @@ def main() -> None:
     for linha in pedidos:
         print(linha)
     if len(pedidos) != 1:
-        fail(f"esperado 1 POST /v1/chat/completions no ai-core, vieram {len(pedidos)}")
+        fail(f"esperado 1 POST /v1/chat/completions no axon, vieram {len(pedidos)}")
 
     print("\n== 4. pedido efêmero e sem ferramentas: o pedido foi aceito pela plataforma")
     if not pedidos[0].rstrip().endswith("200 OK"):
         fail(f"a plataforma recusou o pedido do Open WebUI: {pedidos[0].strip()}")
-    print("200 OK — sem `tools` (recusado com 400) e sem conversa gravada (x-ai-core-store: false)")
+    print("200 OK — sem `tools` (recusado com 400) e sem conversa gravada (x-axon-store: false)")
 
-    print("\n== 5. a timeline de status (x-ai-core-progress: status)")
+    print("\n== 5. a timeline de status (x-axon-progress: status)")
     historico = mensagem.get("statusHistory")
     timeline = [item for item in historico if isinstance(item, dict)] if isinstance(historico, list) else []
     for item in timeline:

@@ -1,45 +1,48 @@
 # A instalação em execução (spec 002 US5, US7; research R24, R25, R33, R34, R42–R45). Segredos e modo no .env (copie de
 # .env.example).
-#   docker compose up --build      # o build usa o agente SSH para ler o agentic-app e o ai-scouting
+#   docker compose up --build      # o build usa o agente SSH para ler o axon e o axon-scouting
 # Modos (R42): sem perfil, só a API (chaves de API); COMPOSE_PROFILES=webui no .env acrescenta o Open WebUI, e
 # console a console de administração (spec 013); webui,console sobe os dois. Os dois entram pelo provedor de
 # identidade da própria plataforma (spec 012) — o Keycloak de desenvolvimento saiu (ADR-030).
-# Ingestão do corpus do scouting (uma vez, e a cada mudança no corpus), com um clone do ai-scouting ao lado:
-#   docker compose run --rm -v ../ai-scouting/corpus:/corpus:ro ai-core ai-scouting-corpus ingest /corpus/corpus.yaml
+# Ingestão do corpus do scouting (uma vez, e a cada mudança no corpus), com um clone do axon-scouting ao lado:
+#   docker compose run --rm -v ../axon-scouting/corpus:/corpus:ro axon axon-scouting-corpus ingest /corpus/corpus.yaml
 # Contas (com a identidade ligada), antes ou depois de subir:
-#   docker compose run --rm ai-core ai-core users create <nome> --email <e-mail> [--group admin]
+#   docker compose run --rm axon axon users create <nome> --email <e-mail> [--group admin]
+# O projeto se chama axon, fixo (spec 002 R56): não depende do nome da pasta, e os volumes ficam axon_*.
+name: axon
+
 services:
-  ai-core:
+  axon:
     build:
       context: .
       target: runtime
       ssh:
         - core=${SSH_AUTH_SOCK}
         - packs=${SSH_AUTH_SOCK}
-    image: agentic-deploy:local
+    image: axon:local
     env_file: .env
     environment:
       # Postgres sempre (R43): contas, chaves de API, Assistants de usuário, conversas e servidores MCP sobrevivem a
       # restart. A senha vem do .env; o banco só existe na rede do compose.
-      AI_CORE_PROFILE: persistent
-      AI_CORE_DATABASE_URL: postgresql://ai_core:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/ai_core
-      # O emissor dos tokens é o endereço que o navegador vê (spec 012 FR-019); os contêineres falam com ai-core:8000.
+      AXON_PROFILE: persistent
+      AXON_DATABASE_URL: postgresql://axon:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@postgres:5432/axon
+      # O emissor dos tokens é o endereço que o navegador vê (spec 012 FR-019); os contêineres falam com axon:8000.
       # Com a console, é a origem dela (R45): o nginx dela repassa os prefixos do core sem reescrever.
-      AI_CORE_PUBLIC_URL: ${AI_CORE_PUBLIC_URL:-http://localhost:${AI_CORE_HOST_PORT:-8000}}
-      AI_CORE_IDENTITY_CLIENTS_FILE: /etc/ai-core/identity.yaml
+      AXON_PUBLIC_URL: ${AXON_PUBLIC_URL:-http://localhost:${AXON_HOST_PORT:-8000}}
+      AXON_IDENTITY_CLIENTS_FILE: /etc/axon/identity.yaml
       # Os X-Forwarded-* do nginx da console valem (origem do login, bloqueio por origem): as redes privadas do Docker.
-      AI_CORE_TRUSTED_PROXIES: ${AI_CORE_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
-      # Os da CLI `ai-scouting-corpus` (spec 102): o mesmo Qdrant e o mesmo modelo do config do pack no packs.yaml.
-      AI_SCOUTING_QDRANT_URL: http://qdrant:6333
-      AI_SCOUTING_EMBEDDING_DIR: /opt/ai-scouting/e5-small
+      AXON_TRUSTED_PROXIES: ${AXON_TRUSTED_PROXIES:-172.16.0.0/12,192.168.0.0/16}
+      # Os da CLI `axon-scouting-corpus` (spec 102): o mesmo Qdrant e o mesmo modelo do config do pack no packs.yaml.
+      AXON_SCOUTING_QDRANT_URL: http://qdrant:6333
+      AXON_SCOUTING_EMBEDDING_DIR: /opt/axon-scouting/e5-small
     ports:
-      - "${AI_CORE_HOST_PORT:-8000}:8000"
+      - "${AXON_HOST_PORT:-8000}:8000"
     volumes:
-      - ./config/assistants.yaml:/etc/ai-core/assistants.yaml:ro
+      - ./config/assistants.yaml:/etc/axon/assistants.yaml:ro
       # O arquivo de clientes é do operador (R45): IDENTITY_FILE aponta outro (endereços de produção, outras portas).
-      - ${IDENTITY_FILE:-./config/identity.yaml}:/etc/ai-core/identity.yaml:ro
+      - ${IDENTITY_FILE:-./config/identity.yaml}:/etc/axon/identity.yaml:ro
       # Arquivos de segredo (o da senha do admin inicial, quando usado): nunca em variável de ambiente.
-      - ./secrets:/run/secrets/ai-core:ro
+      - ./secrets:/run/secrets/axon:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,13 +57,13 @@ services:
   postgres:
     image: postgres:17.6
     environment:
-      POSTGRES_USER: ai_core
-      POSTGRES_DB: ai_core
+      POSTGRES_USER: axon
+      POSTGRES_DB: axon
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ai_core -d ai_core"]
+      test: ["CMD-SHELL", "pg_isready -U axon -d axon"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -69,29 +72,31 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.19.2
     environment:
-      # Opcional: com valor, o servidor exige a chave, e o pack a lê de AI_SCOUTING_QDRANT_API_KEY (o mesmo valor).
+      # Opcional: com valor, o servidor exige a chave, e o pack a lê de AXON_SCOUTING_QDRANT_API_KEY (o mesmo valor).
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
     volumes:
       - qdrant-data:/qdrant/storage
 
   # A interface (spec 008 US8; 002 R38, R44): só o formato da OpenAI, configurada por ambiente. O login é o da
   # plataforma (spec 012): o Open WebUI é o cliente confidencial `open-webui` do config/identity.yaml. A conexão repassa
-  # o access token de cada usuário ao /v1 (system_oauth), manda x-ai-core-store: false (o histórico é do Open WebUI) e
-  # x-ai-core-progress: status (o progresso vira a timeline de status do Open WebUI — 008 FR-005a), e as tarefas
+  # o access token de cada usuário ao /v1 (system_oauth), manda x-axon-store: false (o histórico é do Open WebUI) e
+  # x-axon-progress: status (o progresso vira a timeline de status do Open WebUI — 008 FR-005a), e as tarefas
   # auxiliares ficam desligadas — cada mensagem é uma execução da plataforma.
   open-webui:
     profiles: [webui]
     image: ghcr.io/open-webui/open-webui:v0.12.0
     environment:
       WEBUI_URL: http://localhost:${OPEN_WEBUI_HOST_PORT:-3000}
+      # O nome da interface (R57); o Open WebUI acrescenta "(Open WebUI)".
+      WEBUI_NAME: Axon
       WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-}
       ENABLE_PERSISTENT_CONFIG: "false"
       ENABLE_OLLAMA_API: "false"
       ENABLE_OPENAI_API: "true"
-      OPENAI_API_BASE_URLS: http://ai-core:8000/v1
+      OPENAI_API_BASE_URLS: http://axon:8000/v1
       OPENAI_API_CONFIGS: >-
         {"0": {"enable": true, "auth_type": "system_oauth", "connection_type": "external",
-        "headers": {"x-ai-core-store": "false", "x-ai-core-progress": "status"}}}
+        "headers": {"x-axon-store": "false", "x-axon-progress": "status"}}}
       BYPASS_MODEL_ACCESS_CONTROL: "true"
       # Nenhum `tools` vai à plataforma, que o recusa porque as capacidades vêm do Assistant (princípio IV). Na chamada
       # de função nativa — o padrão do v0.12 — as ferramentas embutidas do Open WebUI (memória, notas, hora, calendário,
@@ -114,12 +119,12 @@ services:
       # ele não renova mais o token que repassa à plataforma e a conversa falha ("Model '' was not found").
       JWT_EXPIRES_IN: ${OPEN_WEBUI_SESSION_EXPIRES_IN:-29d}
       ENABLE_LOGIN_FORM: "false"
-      OAUTH_PROVIDER_NAME: ${AI_CORE_DISPLAY_NAME:-Agentic}
+      OAUTH_PROVIDER_NAME: ${AXON_DISPLAY_NAME:-Axon}
       # A descoberta pelo endereço interno: ela responde o emissor público (o do navegador) e os endpoints de servidor
       # pelo endereço pelo qual chegou (spec 012 R8).
-      OPENID_PROVIDER_URL: http://ai-core:8000/.well-known/openid-configuration
+      OPENID_PROVIDER_URL: http://axon:8000/.well-known/openid-configuration
       OAUTH_CLIENT_ID: open-webui
-      OAUTH_CLIENT_SECRET: ${AI_CORE_IDENTITY_SECRET_OPEN_WEBUI:-}
+      OAUTH_CLIENT_SECRET: ${AXON_IDENTITY_SECRET_OPEN_WEBUI:-}
       OAUTH_SCOPES: openid email profile groups offline_access
       OAUTH_CODE_CHALLENGE_METHOD: S256
       # Contas criadas na Fase 7 (Keycloak) são religadas pelo e-mail: o `sub` muda, o e-mail não (R48).
@@ -130,10 +135,10 @@ services:
     ports:
       - "${OPEN_WEBUI_HOST_PORT:-3000}:8080"
     depends_on:
-      - ai-core
+      - axon
 
   # A console de administração (spec 013; 002 R46): o nginx serve a SPA e repassa /v1, /private/v1, /admin/v1, /oauth2 e
-  # /.well-known ao core sem reescrever. Com ela, AI_CORE_PUBLIC_URL é a origem da console (http://localhost:<porta>).
+  # /.well-known ao core sem reescrever. Com ela, AXON_PUBLIC_URL é a origem da console (http://localhost:<porta>).
   console:
     profiles: [console]
     build:
@@ -141,13 +146,13 @@ services:
       target: console
       ssh:
         - core=${SSH_AUTH_SOCK}
-    image: agentic-deploy-console:local
+    image: axon-console:local
     environment:
-      AI_CORE_UPSTREAM: http://ai-core:8000
+      AXON_UPSTREAM: http://axon:8000
     ports:
       - "${CONSOLE_HOST_PORT:-8080}:8080"
     depends_on:
-      - ai-core
+      - axon
     # Somente leitura: o envsubst renderiza em /etc/nginx/conf.d e o nginx escreve em /tmp, ambos em memória e do
     # usuário do processo (uid 101).
     read_only: true
