@@ -1,5 +1,5 @@
 # Publica as imagens base de uma versão do core (spec 002 FR-032; ADR-042, item 2): axon-build, axon-runtime e
-# axon-console no GHCR do dono do axon, com a tag do git sem o "v" (v0.7.0-rc4 → 0.7.0-rc4). Imutável: uma tag que já
+# axon-console no GHCR do dono do axon, com a tag do git sem o "v" (v0.7.0-rc6 → 0.7.0-rc6). Imutável: uma tag que já
 # existe no registry não é publicada de novo, e não há `latest`. Antes de publicar, roda a prova (scripts/check-build.sh)
 # sobre a mesma tag.
 #
