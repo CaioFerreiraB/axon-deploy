@@ -89,7 +89,8 @@ services:
 
   # O chat (spec 008 US8): login pela plataforma (cliente confidencial `open-webui` do config/identity.yaml), o token de
   # cada usuário repassado ao /v1 (system_oauth), x-axon-store: false (o histórico é do Open WebUI) e
-  # x-axon-progress: status (a timeline de status). Cada mensagem é uma execução da plataforma.
+  # x-axon-progress: status (a timeline de status) e x-axon-citations: sources (o [n] abre o original e as fontes
+  # ficam numa lista colapsável; ADR-051). Cada mensagem é uma execução da plataforma.
   open-webui:
     profiles: [webui]
     image: ghcr.io/open-webui/open-webui:v0.12.0
@@ -103,7 +104,7 @@ services:
       OPENAI_API_BASE_URLS: http://axon:8000/v1
       OPENAI_API_CONFIGS: >-
         {"0": {"enable": true, "auth_type": "system_oauth", "connection_type": "external",
-        "headers": {"x-axon-store": "false", "x-axon-progress": "status"}}}
+        "headers": {"x-axon-store": "false", "x-axon-progress": "status", "x-axon-citations": "sources"}}}
       BYPASS_MODEL_ACCESS_CONTROL: "true"
       # Nenhum `tools` vai à plataforma (as capacidades vêm do Assistant): chamada de função legada e sem as
       # ferramentas embutidas do Open WebUI.
