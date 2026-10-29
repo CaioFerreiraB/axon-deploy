@@ -71,7 +71,7 @@ services:
   # AXON_PUBLIC_URL.
   console:
     profiles: [console]
-    image: ghcr.io/caioferreirab/axon-console:0.7.0-rc6
+    image: ghcr.io/caioferreirab/axon-console:0.7.0-rc9
     environment:
       AXON_UPSTREAM: http://axon:8000
     networks:
@@ -89,8 +89,10 @@ services:
 
   # O chat (spec 008 US8): login pela plataforma (cliente confidencial `open-webui` do config/identity.yaml), o token de
   # cada usuário repassado ao /v1 (system_oauth), x-axon-store: false (o histórico é do Open WebUI) e
-  # x-axon-progress: status (a timeline de status) e x-axon-citations: sources (o [n] abre o original e as fontes
-  # ficam numa lista colapsável; ADR-051). Cada mensagem é uma execução da plataforma.
+  # x-axon-progress: status (a timeline de status), x-axon-citations: sources (o [n] abre o original e as fontes
+  # ficam numa lista colapsável; ADR-051) e x-axon-charts: embeds (os gráficos das tools, interativos, num iframe que
+  # carrega os scripts de /static/ do AXON_PUBLIC_URL; com IFRAME_CSP, libere esse host em script-src; ADR-052). Cada
+  # mensagem é uma execução da plataforma.
   open-webui:
     profiles: [webui]
     image: ghcr.io/open-webui/open-webui:v0.12.0
@@ -104,7 +106,8 @@ services:
       OPENAI_API_BASE_URLS: http://axon:8000/v1
       OPENAI_API_CONFIGS: >-
         {"0": {"enable": true, "auth_type": "system_oauth", "connection_type": "external",
-        "headers": {"x-axon-store": "false", "x-axon-progress": "status", "x-axon-citations": "sources"}}}
+        "headers": {"x-axon-store": "false", "x-axon-progress": "status", "x-axon-citations": "sources",
+        "x-axon-charts": "embeds"}}}
       BYPASS_MODEL_ACCESS_CONTROL: "true"
       # Nenhum `tools` vai à plataforma (as capacidades vêm do Assistant): chamada de função legada e sem as
       # ferramentas embutidas do Open WebUI.

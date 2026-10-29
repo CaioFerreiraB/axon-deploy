@@ -38,13 +38,13 @@ Nenhum pack além do `axon-generic`, nenhum endereço e nenhum segredo moram aqu
 | `axon-runtime` | o mesmo ambiente sem `uv`, `pip` nem `ensurepip`; usuário `axon` (uid 10001) sem escrita em `/opt/axon`, `/opt/axon-data` e `/etc/axon`; `axon serve`. Roda sozinha, só com o `generic` |
 | `axon-console` | a console de administração da mesma tag, no nginx sem privilégio |
 
-A tag de cada imagem é a do `axon` sem o `v` (`v0.7.0-rc6` → `0.7.0-rc6`). É imutável: o workflow recusa publicar
+A tag de cada imagem é a do `axon` sem o `v` (`v0.7.0-rc9` → `0.7.0-rc9`). É imutável: o workflow recusa publicar
 uma tag que já existe, e não há `latest`. As imagens ficam em `ghcr.io/caioferreirab/`, privadas enquanto o `axon` for.
 
 Para publicar uma versão nova do core, depois da tag no `axon`:
 
 ```bash
-gh workflow run images.yml -f core_ref=v0.7.0-rc6
+gh workflow run images.yml -f core_ref=v0.7.0-rc9
 ```
 
 O workflow roda a prova sobre a mesma tag antes de publicar.
