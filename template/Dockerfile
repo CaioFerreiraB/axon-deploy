@@ -7,7 +7,7 @@
 # Packs privados entram por montagem SSH do BuildKit (identidade `packs`): nenhuma credencial fica em camada.
 
 # A versão da plataforma: a tag das imagens base (a do axon sem o "v"). Atualizar é trocar este valor.
-ARG AXON_VERSION=0.7.0-rc9
+ARG AXON_VERSION=0.7.0-rc10
 ARG AXON_REGISTRY=ghcr.io/caioferreirab
 
 FROM ${AXON_REGISTRY}/axon-build:${AXON_VERSION} AS packs

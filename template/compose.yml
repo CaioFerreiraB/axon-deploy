@@ -71,7 +71,7 @@ services:
   # AXON_PUBLIC_URL.
   console:
     profiles: [console]
-    image: ghcr.io/caioferreirab/axon-console:0.7.0-rc9
+    image: ghcr.io/caioferreirab/axon-console:0.7.0-rc10
     environment:
       AXON_UPSTREAM: http://axon:8000
     networks:

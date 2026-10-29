@@ -9,7 +9,7 @@
 #
 # O axon é privado: o clone usa a identidade SSH `core` do BuildKit, e o código entra nos outros estágios só por
 # montagem — nenhum fonte nem credencial fica em camada.
-#   docker buildx build --ssh core --build-arg CORE_REF=v0.7.0-rc9 --target runtime -t axon-runtime:0.7.0-rc9 images
+#   docker buildx build --ssh core --build-arg CORE_REF=v0.7.0-rc10 --target runtime -t axon-runtime:0.7.0-rc10 images
 
 ARG PYTHON_IMAGE=python:3.14-slim
 
